@@ -94,7 +94,7 @@ Use this when Studio has local HTTP/plugin network access enabled.
 7. Select the Max armature.
 8. Click `Import Animation from Max`.
 
-The bridge samples the active Max animation range at one key per frame. Set the scene animation range before exporting. The frame rate does not need to be fixed at 60 FPS; Roblox keyframes are timed in seconds, so 30 FPS frame 0-30 and 60 FPS frame 0-60 both bake as 1 second. `Rest Pose` must match the Roblox rig's default/bind pose, not necessarily the first animation frame. `Export Bone Translation` defaults off because FBX dummy hierarchies often produce local translation deltas even for rotation-only bone motion.
+The bridge samples the active Max animation range at one key per frame. Set the scene animation range before exporting. The frame rate does not need to be fixed at 60 FPS; Roblox keyframes are timed in seconds, so 30 FPS frame 0-30 and 60 FPS frame 0-60 both bake as 1 second. `Rest Pose` must match the Roblox rig's default/bind pose, not necessarily the first animation frame. `Export Bone Translation` defaults off because FBX dummy hierarchies often produce local translation deltas even for rotation-only bone motion. Max Matrix3 rotation rows are transposed before creating Roblox CFrame components so the exported delta matches Blender/Roblox transform order.
 
 After baking, the 3ds Max Listener should report a useful range, for example:
 
@@ -104,7 +104,7 @@ Baked Roblox animation to clipboard from 'Root' (31 keyframes, 1.000s, frames 0.
 
 If it reports `1 keyframes` or `0.000s`, check the 3ds Max animation range and make sure you are running the newest package.
 
-If Roblox shows the imported clip as 60 frames for a 1 second animation, that is only Studio's 60 FPS timeline display. A 30 FPS Max range from frame 0 to 30 should still import as 1 second. If playback ends immediately, check the 3ds Max Listener for a warning that only a few unique poses were sampled. Deform bone exports use the same `-X, Y, -Z` Roblox-space delta conversion as the Blender addon.
+If Roblox shows the imported clip as 60 frames for a 1 second animation, that is only Studio's 60 FPS timeline display. A 30 FPS Max range from frame 0 to 30 should still import as 1 second. If playback ends immediately, check the 3ds Max Listener for a warning that only a few unique poses were sampled. Deform bone exports transpose Max row-basis rotations and then use the same `-X, Y, -Z` Roblox-space delta conversion as the Blender addon.
 
 If position scale is wrong, change `Manual Unit Scale` in the Max launcher before baking or restarting the local server. The default is `1`.
 

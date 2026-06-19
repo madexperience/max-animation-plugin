@@ -212,7 +212,7 @@ def _deform_delta_to_components(
     )
     signs = (-1.0, 1.0, -1.0)
     swizzled_rows = [
-        [signs[row_index] * clean_rows[row_index][col_index] * signs[col_index] for col_index in range(3)]
+        [signs[row_index] * clean_rows[col_index][row_index] * signs[col_index] for col_index in range(3)]
         for row_index in range(3)
     ]
 
@@ -261,7 +261,7 @@ def _components_to_deform_delta_matrix(components: list[float], unit_scale: floa
     for row_index in range(3):
         row = []
         for col_index in range(3):
-            value = float(components[3 + row_index * 3 + col_index])
+            value = float(components[3 + col_index * 3 + row_index])
             row.append(signs[row_index] * value * signs[col_index])
         rows.append(row)
 
@@ -526,9 +526,11 @@ class MaxSceneAdapter:
                 if current_local is None or rest_local is None:
                     continue
 
-                # Roblox Bone.Transform is the delta applied after the
-                # rest CFrame, so currentLocal = restLocal * delta.
-                delta = _matrix_inverse(rest_local) * current_local
+                # Max Matrix3 uses row-vector transform order. Convert the
+                # row-space delta into Roblox/Blender-style CFrame components
+                # by computing current * inverse(rest), then transposing in
+                # _deform_delta_to_components().
+                delta = current_local * _matrix_inverse(rest_local)
                 pose_table[name] = {
                     "components": _deform_delta_to_components(delta, unit_scale, export_translation),
                     "easingStyle": "Linear",
@@ -560,9 +562,9 @@ class MaxSceneAdapter:
                 "export_translation": export_translation,
                 "sample_step": self.sample_step,
                 "format": "max-animation-plugin-json-v1",
-                "delta_order": "inverse_rest_times_current",
-                "rotation_basis": "orthonormalized_rows",
-                "deform_axis_conversion": "blender_parity_neg_x_pos_y_neg_z",
+                "delta_order": "current_times_inverse_rest_transposed",
+                "rotation_basis": "orthonormalized_max_rows_transposed",
+                "deform_axis_conversion": "transpose_then_blender_parity_neg_x_pos_y_neg_z",
                 "target_bone_rest_received": target_bone_rest is not None,
             },
         }
@@ -617,7 +619,12 @@ class MaxSceneAdapter:
                             if is_deform_payload
                             else _components_to_matrix(components, unit_scale)
                         )
-                        local_matrix = rest_local * delta
+                        export_info = animation_data.get("export_info")
+                        delta_order = export_info.get("delta_order") if isinstance(export_info, dict) else ""
+                        if is_deform_payload and delta_order == "current_times_inverse_rest_transposed":
+                            local_matrix = delta * rest_local
+                        else:
+                            local_matrix = rest_local * delta
                         parent_node = _parent(node)
                         if parent_node in nodes:
                             node.transform = local_matrix * parent_node.transform
