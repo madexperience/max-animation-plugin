@@ -6,11 +6,12 @@
 
 ## 현재 상태
 
-초기 포팅 작업용 저장소입니다.
+초기 포팅 작업용 저장소이며, Studio 플러그인 소스는 `studio-plugin/` 아래에 들어와 있습니다.
 
 - Studio 플러그인 UI와 기능 흐름은 기존 Blender Animations Plugin을 최대한 유지합니다.
 - 3ds Max 쪽은 기존 localhost HTTP API와 호환되는 서버부터 구현합니다.
 - 첫 목표는 `Roblox Studio Plugin -> localhost:31337 -> 3ds Max Plugin` 연결을 검증하는 것입니다.
+- Studio 플러그인의 Fusion 의존성은 Wally로 설치합니다.
 
 아직 전체 기능이 완성된 릴리스는 아닙니다.
 
@@ -33,7 +34,10 @@
 │       ├── max_scene.py
 │       └── server.py
 ├── studio-plugin/
-│   └── README.md
+│   ├── default.project.json
+│   ├── wally.toml
+│   ├── README.md
+│   └── src/ServerScriptService/MaxAnimationsInternal/
 ├── docs/
 │   ├── protocol.md
 │   └── roadmap.md
@@ -67,16 +71,21 @@
 
 ## Roblox Studio 플러그인 설치
 
-초기 단계에서는 기존 Studio 플러그인 구조를 유지하고, 연결 대상만 3ds Max 서버로 맞추는 방향입니다.
+Studio 플러그인 소스는 `studio-plugin/` 아래에 있습니다. 현재 의존성은 Fusion만 필요합니다.
 
-개발 중 설치 흐름은 다음을 목표로 합니다.
+```powershell
+rokit install
+cd studio-plugin
+wally install
+rojo build plugin.project.json -o MaxAnimationsPlugin.rbxm
+$plugins = Join-Path $env:LOCALAPPDATA "Roblox\Plugins"
+New-Item -ItemType Directory -Force $plugins
+Copy-Item .\MaxAnimationsPlugin.rbxm $plugins\MaxAnimationsPlugin.rbxm -Force
+```
 
-1. `studio-plugin/` 아래에 Rojo 프로젝트를 구성합니다.
-2. Studio 플러그인 UI 텍스트를 Blender에서 Max로 변경합니다.
-3. localhost 통신 API는 기존 Blender 서버 호환 형식을 유지합니다.
-4. Rojo 또는 Roblox Studio의 Local Plugin 저장 기능으로 설치합니다.
+그 다음 Roblox Studio를 재시작하거나 로컬 플러그인을 reload한 뒤, Plugins 탭의 `Max Animations` 버튼을 열면 됩니다. 개발 중에는 `rojo serve default.project.json`로 Studio에 동기화할 수 있습니다. 배포/로컬 설치용 `.rbxm`은 `plugin.project.json`으로 빌드합니다.
 
-정식 설치 방법은 Studio 플러그인 소스가 이 저장소에 정리되는 시점에 업데이트합니다.
+자세한 절차는 [studio-plugin/README.md](studio-plugin/README.md)를 참고하세요.
 
 ## 통신 API
 

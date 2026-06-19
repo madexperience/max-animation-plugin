@@ -1,0 +1,16 @@
+{
+  "name": "MaxAnimationsPlugin",
+  "tree": {
+    "$className": "DataModel",
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "$ignoreUnknownInstances": true,
+      "MaxAnimationsInternal": {
+        "$path": "src/ServerScriptService/MaxAnimationsInternal",
+        "Packages": {
+          "$path": "Packages"
+        }
+      }
+    }
+  }
+}

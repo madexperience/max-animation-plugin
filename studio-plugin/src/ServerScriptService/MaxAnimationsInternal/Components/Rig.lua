@@ -1,0 +1,1092 @@
+--!strict
+--!optimize 2
+
+local Rig = {}
+Rig.__index = Rig
+
+local RigPart = require(script.Parent.RigPart)
+
+local LOAD_POSE_YIELD_INTERVAL = 500
+local LOAD_KEYFRAME_YIELD_INTERVAL = 25
+
+type ConnectedJoint = Motor6D | Weld | WeldConstraint
+type CacheableJoint = ConnectedJoint | AnimationConstraint
+
+local function getConnectedJointParts(joint: ConnectedJoint): (BasePart?, BasePart?)
+	return joint.Part0, joint.Part1
+end
+
+local function getJointParts(joint: CacheableJoint): (BasePart?, BasePart?)
+	if joint:IsA("AnimationConstraint") then
+		local attachment0 = joint.Attachment0
+		local attachment1 = joint.Attachment1
+		local part0 = attachment0 and attachment0.Parent
+		local part1 = attachment1 and attachment1.Parent
+		if part0 and part1 and part0:IsA("BasePart") and part1:IsA("BasePart") then
+			return part0 :: BasePart, part1 :: BasePart
+		end
+		return nil, nil
+	end
+
+	local part0, part1 = getConnectedJointParts(joint)
+	if part0 and part0:IsA("BasePart") and part1 and part1:IsA("BasePart") then
+		return part0 :: BasePart, part1 :: BasePart
+	end
+
+	return nil, nil
+end
+
+type LoadProgressCallback = (progress: number, status: string?, detail: string?, canEstimate: boolean?) -> ()
+type FaceControlPose = {
+	value: number,
+	easingStyle: string,
+	easingDirection: string,
+}
+type FaceControlTimeline = { [number]: FaceControlPose }
+type FaceControls = { [string]: FaceControlTimeline }
+
+type self = {
+	model: Model,
+	root: RigPart.RigPart?,
+	animTime: number,
+	loop: boolean,
+	priority: Enum.AnimationPriority,
+	keyframeNames: { { t: number, name: string, value: string?, type: string? } },
+	faceControls: FaceControls,
+	bones: { [string]: RigPart.RigPart },
+	bonesByInstance: { [Instance]: RigPart.RigPart },
+	motorNameAliases: { [string]: RigPart.RigPart },
+	isDeformRig: boolean,
+	boneHierarchy: { [string]: string? },
+	_jointCache: { [Instance]: { CacheableJoint } },
+	_ambiguousAnimationChannels: { [string]: boolean }?,
+}
+
+local function getAnimationChannelPriority(rigPart: any): number
+	if not rigPart then
+		return 0
+	end
+
+	if rigPart.bone then
+		return 3
+	end
+
+	local joint = rigPart.joint
+	if joint then
+		if joint:IsA("Motor6D") or joint:IsA("AnimationConstraint") then
+			return 2
+		end
+		if joint:IsA("Weld") or joint:IsA("WeldConstraint") then
+			return 1
+		end
+	end
+
+	return 0
+end
+
+local function markAmbiguousAnimationChannel(self: any, channelName: string?)
+	if not channelName or channelName == "" then
+		return
+	end
+
+	self._ambiguousAnimationChannels = self._ambiguousAnimationChannels or {}
+	self._ambiguousAnimationChannels[channelName] = true
+end
+
+local function addMotorNameAlias(self: any, aliasMap: { [string]: any }, aliasName: string?, rigPart: any)
+	if not aliasName or aliasName == "" then
+		return
+	end
+
+	local existingAlias = aliasMap[aliasName]
+	if existingAlias and existingAlias ~= rigPart then
+		if getAnimationChannelPriority(existingAlias) >= 2 and getAnimationChannelPriority(rigPart) >= 2 then
+			markAmbiguousAnimationChannel(self, aliasName)
+		end
+		return
+	end
+
+	aliasMap[aliasName] = rigPart
+end
+
+local function registerMotorNameAliases(self: any)
+	self.motorNameAliases = {}
+	if not self.root then
+		return
+	end
+
+	local stack = { self.root }
+	local visited: { [any]: boolean } = {}
+	while #stack > 0 do
+		local rigPart = stack[#stack]
+		stack[#stack] = nil
+
+		if visited[rigPart] then
+			continue
+		end
+		visited[rigPart] = true
+
+		local joint = rigPart.joint
+		if joint and joint:IsA("Motor6D") then
+			local jointName = joint.Name
+			addMotorNameAlias(self, self.motorNameAliases, jointName, rigPart)
+			if string.sub(jointName, -7) == "Motor6D" then
+				addMotorNameAlias(self, self.motorNameAliases, string.sub(jointName, 1, #jointName - 7), rigPart)
+			elseif string.sub(jointName, -5) == "Motor" then
+				addMotorNameAlias(self, self.motorNameAliases, string.sub(jointName, 1, #jointName - 5), rigPart)
+			end
+		end
+
+		for _, child in ipairs(rigPart.children) do
+			stack[#stack + 1] = child
+		end
+	end
+end
+
+function Rig.new(model: Model)
+	local self: self = {
+		model = model,
+		root = nil,
+		animTime = 10,
+		loop = true,
+		priority = Enum.AnimationPriority.Action,
+		keyframeNames = {}, -- table with values each in the format: {t = number, name = string, value = string?, type = string?}
+		faceControls = {},
+		bones = {}, -- Initialize bones property
+		bonesByInstance = {},
+		motorNameAliases = {},
+		isDeformRig = false, -- Flag to indicate if this is a deform bone rig
+		boneHierarchy = {}, -- Store bone parent relationships
+		_jointCache = {},
+		_ambiguousAnimationChannels = {},
+	}
+	setmetatable(self, Rig)
+
+	-- Single traversal to gather all necessary descendants
+	local allBones = {}
+	local allJoints: { CacheableJoint } = {}
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("Bone") then
+			table.insert(allBones, descendant)
+		elseif descendant:IsA("Motor6D") or descendant:IsA("Weld") or descendant:IsA("WeldConstraint") or descendant:IsA("AnimationConstraint") then
+			table.insert(allJoints, descendant)
+		end
+	end
+
+	self.isDeformRig = #allBones > 0
+
+	-- Check for duplicate bones - this is a problem as animation channels are keyed by name
+	local boneNameCounts: { [string]: number } = {}
+	local duplicateBoneNames: { string } = {}
+
+	for _, bone in ipairs(allBones) do
+		local boneName = bone.Name
+		boneNameCounts[boneName] = (boneNameCounts[boneName] or 0) + 1
+	end
+
+	for boneName, count in pairs(boneNameCounts) do
+		if count > 1 then
+			table.insert(duplicateBoneNames, boneName)
+		end
+	end
+
+	if #duplicateBoneNames > 0 then
+		table.sort(duplicateBoneNames)
+		error(
+			"DUPLICATE BONE NAMES DETECTED: "
+				.. table.concat(duplicateBoneNames, ", ")
+				.. ". Animation channels are keyed by name, so rename duplicates and retry."
+		)
+	end
+
+	-- Pre-build the joint cache for fast lookups based on actual connected parts.
+	self._jointCache = {}
+
+	local function addJointToCache(joint: CacheableJoint)
+		local p0, p1 = getJointParts(joint)
+		if p0 then
+			self._jointCache[p0] = self._jointCache[p0] or {}
+			table.insert(self._jointCache[p0], joint)
+		end
+		if p1 then
+			self._jointCache[p1] = self._jointCache[p1] or {}
+			table.insert(self._jointCache[p1], joint)
+		end
+	end
+
+	for _, joint in ipairs(allJoints) do
+		addJointToCache(joint)
+	end
+
+	-- Check for cyclic motor6d dependencies before building hierarchy
+	self:checkCyclicMotor6D(model)
+
+	-- Always build the Motor6D hierarchy first, if a root exists.
+	if model.PrimaryPart then
+		self.root = RigPart.new(self, model.PrimaryPart, nil, self.isDeformRig)
+	else
+		warn("Model has no PrimaryPart for traditional rig setup. Rig root will be nil.")
+		self.root = nil
+	end
+
+	-- If it's a deform rig, find all bones and add them to the rig.
+	-- This assumes bones are parented to parts that are already in the rig.
+	if self.isDeformRig then
+		self:buildBoneHierarchy(allBones)
+	end
+
+	registerMotorNameAliases(self)
+
+	return self
+end
+
+function Rig:checkCyclicMotor6D(model: Model)
+	-- Build a graph of motor6d connections
+	local motor6dGraph: { [BasePart]: { BasePart } } = {}
+	local allParts: { BasePart } = {}
+
+	-- Collect all motor6d and animation constraint joints and build the graph
+	for _, descendant in ipairs(model:GetDescendants()) do
+		if descendant:IsA("Motor6D") then
+			local joint = descendant :: Motor6D
+			local part0 = joint.Part0
+			local part1 = joint.Part1
+			if part0 and part1 then
+				if not motor6dGraph[part0] then
+					motor6dGraph[part0] = {}
+					table.insert(allParts, part0)
+				end
+				if not motor6dGraph[part1] then
+					motor6dGraph[part1] = {}
+					table.insert(allParts, part1)
+				end
+
+				-- Add directed edge from part0 to part1
+				table.insert(motor6dGraph[part0], part1)
+			end
+		elseif descendant:IsA("AnimationConstraint") then
+			local joint = descendant :: AnimationConstraint
+			local attachment0 = joint.Attachment0
+			local attachment1 = joint.Attachment1
+			local part0 = attachment0 and attachment0.Parent
+			local part1 = attachment1 and attachment1.Parent
+			if part0 and part1 and part0:IsA("BasePart") and part1:IsA("BasePart") then
+				local p0 = part0 :: BasePart
+				local p1 = part1 :: BasePart
+				if not motor6dGraph[p0] then
+					motor6dGraph[p0] = {}
+					table.insert(allParts, p0)
+				end
+				if not motor6dGraph[p1] then
+					motor6dGraph[p1] = {}
+					table.insert(allParts, p1)
+				end
+
+				-- Add directed edge from part0 to part1
+				table.insert(motor6dGraph[p0], p1)
+			end
+		end
+	end
+
+	-- Use DFS to detect cycles
+	local visited: { [BasePart]: boolean } = {}
+	local recStack: { [BasePart]: boolean } = {}
+	local cyclePath: { BasePart } = {}
+
+	local function hasCycleDFS(part: BasePart): boolean
+		visited[part] = true
+		recStack[part] = true
+		table.insert(cyclePath, part)
+
+		local neighbors = motor6dGraph[part] or {}
+		for _, neighbor in ipairs(neighbors) do
+			if not visited[neighbor] then
+				if hasCycleDFS(neighbor) then
+					return true
+				end
+			elseif recStack[neighbor] then
+				-- Found a cycle! Build the cycle description
+				local cycleDescription = {}
+				local startIndex = 1
+				for i, p in ipairs(cyclePath) do
+					if p == neighbor then
+						startIndex = i
+						break
+					end
+				end
+
+				for i = startIndex, #cyclePath do
+					table.insert(cycleDescription, cyclePath[i].Name)
+				end
+				table.insert(cycleDescription, neighbor.Name) -- Close the cycle
+
+				error("CIRCULAR JOINT CHAIN DETECTED: " .. table.concat(cycleDescription, " -> ") ..
+					". This creates an infinite loop that will break rigs. Fix by removing one of the motor6d/animation constraint connections in this chain.")
+			end
+		end
+
+		table.remove(cyclePath) -- Remove current part from path
+		recStack[part] = false
+		return false
+	end
+
+	-- Check each part for cycles
+	for _, part in ipairs(allParts) do
+		if not visited[part] then
+			cyclePath = {} -- Reset path for each new DFS
+			hasCycleDFS(part)
+		end
+	end
+end
+
+
+
+
+
+function Rig:buildBoneHierarchy(allBones)
+	-- Find all bones in the model and create RigParts for them.
+	-- This now ADDS to the rig rather than creating it from scratch.
+    -- Guard against cyclic bone parenting (depth issues) using Kahn's algorithm (iterative, no recursion)
+    do
+        local boneSet: { [Instance]: boolean } = {}
+        for i = 1, #allBones do
+            boneSet[allBones[i]] = true
+        end
+        -- initialize all bones in graph with indegree 0
+        local graph: { [Instance]: { Instance } } = {}
+        local indegree: { [Instance]: number } = {}
+        for i = 1, #allBones do
+            local b = allBones[i]
+            indegree[b] = 0
+            graph[b] = {}
+        end
+        -- build edges: bone -> child bone
+        for i = 1, #allBones do
+            local b = allBones[i]
+            local p = b.Parent
+            -- only add edge if parent is also a bone (bone-to-bone cycle check)
+            if p and boneSet[p] then
+                if not graph[p] then
+                    graph[p] = {}
+                    indegree[p] = indegree[p] or 0
+                end
+                table.insert(graph[p], b)
+                indegree[b] = (indegree[b] or 0) + 1
+            end
+        end
+        -- kahn's: queue all zero-indegree nodes
+        local queue: { Instance } = {}
+        local qh, qt = 1, 0
+        for i = 1, #allBones do
+            local b = allBones[i]
+            if indegree[b] == 0 then
+                qt += 1
+                queue[qt] = b
+            end
+        end
+        local processed = 0
+        while qh <= qt do
+            local n = queue[qh]
+            qh += 1
+            processed += 1
+            local nbrs = graph[n]
+            if nbrs then
+                for i = 1, #nbrs do
+                    local m = nbrs[i]
+                    indegree[m] -= 1
+                    if indegree[m] == 0 then
+                        qt += 1
+                        queue[qt] = m
+                    end
+                end
+            end
+        end
+        -- if we didn't process all bones, there's a cycle
+        if processed < #allBones then
+            error("CIRCULAR BONE HIERARCHY DETECTED: remove the cycle in bone parenting.")
+        end
+    end
+    -- intentionally unused local kept for readability when editing
+    local _bones = self.bones
+
+	local function findParentRigPartViaJoints(bone: Bone): RigPart?
+		-- Find the part this bone is attached to (bone.Parent should be a BasePart)
+		local boneParentPart = bone.Parent
+		if not boneParentPart or not boneParentPart:IsA("BasePart") then
+			return nil
+		end
+
+		-- Look for Motor6D or AnimationConstraint connecting this part to another
+		local joints = self._jointCache[boneParentPart]
+		if not joints then
+			return nil
+		end
+
+		for _, joint in ipairs(joints) do
+			local part0, part1 = nil, nil
+			if joint:IsA("Motor6D") then
+				part0 = joint.Part0
+				part1 = joint.Part1
+			elseif joint:IsA("AnimationConstraint") then
+				local att0 = joint.Attachment0
+				local att1 = joint.Attachment1
+				part0 = att0 and att0.Parent
+				part1 = att1 and att1.Parent
+			end
+
+			-- Find the other part in the joint
+			local otherPart = nil
+			if part0 == boneParentPart and part1 then
+				otherPart = part1
+			elseif part1 == boneParentPart and part0 then
+				otherPart = part0
+			end
+
+			if otherPart and otherPart:IsA("BasePart") then
+				-- Find the RigPart for the other part
+				local parentRigPart = self.bonesByInstance and self.bonesByInstance[otherPart]
+				if parentRigPart then
+					return parentRigPart
+				end
+			end
+		end
+
+		return nil
+	end
+
+	local unresolved = {}
+	for _, bone in ipairs(allBones) do
+		unresolved[#unresolved + 1] = bone
+	end
+
+	while #unresolved > 0 do
+		local resolvedThisPass = false
+        -- attempt to resolve all items; if none resolved, break to avoid infinite loop
+		for i = #unresolved, 1, -1 do
+			local bone = unresolved[i]
+			local parentInstance = bone.Parent
+			local parentPart = nil
+
+			-- First try: find parent via bone.Parent (Roblox hierarchy)
+			if parentInstance then
+				parentPart = self:FindRigPartByInstance(parentInstance)
+			end
+
+			-- Second try: find parent via Motor6D/AnimationConstraint connections
+			if not parentPart then
+				parentPart = findParentRigPartViaJoints(bone)
+			end
+
+			-- Third try: if no parent found, try to find via root's children chain
+			if not parentPart and self.root then
+				local function findInHierarchy(rigPart: RigPart, targetName: string): RigPart?
+					if rigPart.part.Name == targetName then
+						return rigPart
+					end
+					for _, child in ipairs(rigPart.children) do
+						local found = findInHierarchy(child, targetName)
+						if found then
+							return found
+						end
+					end
+					return nil
+				end
+
+				if parentInstance and parentInstance:IsA("Instance") then
+					parentPart = findInHierarchy(self.root, parentInstance.Name)
+				end
+			end
+
+			if parentPart then
+				local rigPart = RigPart.new(self, bone, parentPart, true)
+				table.insert(parentPart.children, rigPart)
+				if self.bones[bone.Name] == nil then
+					self.bones[bone.Name] = rigPart
+				end
+				table.remove(unresolved, i)
+				resolvedThisPass = true
+			end
+		end
+
+		if not resolvedThisPass then
+			for _, bone in ipairs(unresolved) do
+				local parentInstance = bone.Parent
+				warn(
+					"Could not resolve parent rig part for bone:",
+					bone.Name,
+					"Parent:",
+					parentInstance and parentInstance.Name or "<nil>"
+				)
+			end
+			break
+		end
+	end
+end
+
+
+
+function Rig:GetRigParts()
+	local parts = {}
+	local root = self.root
+
+    if not root then
+        return parts
+    end
+
+    -- iterative dfs to avoid recursion limits on deep hierarchies; guards cycles too
+    local stack = { root }
+    local visited = {}
+
+    while #stack > 0 do
+        local current = stack[#stack]
+        stack[#stack] = nil
+
+        if not visited[current] then
+            visited[current] = true
+
+			for _, child in ipairs(current.children) do
+			parts[#parts + 1] = child
+                stack[#stack + 1] = child
+            end
+		end
+	end
+
+	return parts
+end
+
+function Rig:FindRigPart(name)
+	return self.bones[name]
+end
+
+function Rig:FindRigPartByInstance(instance: Instance)
+	return self.bonesByInstance and self.bonesByInstance[instance] or nil
+end
+
+function Rig:ClearPoses()
+	if self.root then
+		self.root.poses = {}
+	end
+	for _, rigPart in pairs(self:GetRigParts()) do
+		rigPart.poses = {}
+	end
+	self.faceControls = {}
+	self.keyframeNames = {}
+end
+
+local function decodeFaceControlState(faceData: any): (number, string, string)
+	local value = 0
+	local easingStyle = "Linear"
+	local easingDirection = "Out"
+
+	if type(faceData) == "table" then
+		if type(faceData[1]) == "number" then
+			value = faceData[1]
+			if type(faceData[2]) == "string" then
+				easingStyle = faceData[2]
+			end
+			if type(faceData[3]) == "string" then
+				easingDirection = faceData[3]
+			end
+		else
+			if type(faceData.value) == "number" then
+				value = faceData.value
+			end
+			if type(faceData.easingStyle) == "string" then
+				easingStyle = faceData.easingStyle
+			end
+			if type(faceData.easingDirection) == "string" then
+				easingDirection = faceData.easingDirection
+			end
+		end
+	elseif type(faceData) == "number" then
+		value = faceData
+	end
+
+	return value, easingStyle, easingDirection
+end
+
+local function buildFaceControlPose(
+	faceControls: FaceControls,
+	controlName: string,
+	t: number
+): FaceControlPose?
+	local controlTimeline = faceControls[controlName]
+	if not controlTimeline then
+		return nil
+	end
+
+	local exact = controlTimeline[t]
+	if exact then
+		return exact
+	end
+
+	local prevTime: number? = nil
+	local nextTime: number? = nil
+	for poseTime, _ in pairs(controlTimeline) do
+		if poseTime < t then
+			if prevTime == nil or poseTime > prevTime then
+				prevTime = poseTime
+			end
+		elseif poseTime > t then
+			if nextTime == nil or poseTime < nextTime then
+				nextTime = poseTime
+			end
+		end
+	end
+
+	if prevTime == nil then
+		return nil
+	end
+
+	local prevPose = controlTimeline[prevTime]
+	if not prevPose then
+		return nil
+	end
+
+	local nextPose = nextTime and controlTimeline[nextTime] or nil
+	if prevPose.easingStyle == "Constant" or not nextPose or nextTime == nil then
+		return prevPose
+	end
+
+	local alpha = (t - prevTime) / (nextTime - prevTime)
+	return {
+		value = prevPose.value + ((nextPose.value - prevPose.value) * alpha),
+		easingStyle = prevPose.easingStyle,
+		easingDirection = prevPose.easingDirection,
+	}
+end
+
+local function createFaceControlsFolder(
+	faceControls: FaceControls,
+	t: number
+): Folder?
+	if next(faceControls) == nil then
+		return nil
+	end
+
+	local folder = Instance.new("Folder")
+	folder.Name = "FaceControls"
+	local added = false
+
+	for controlName in pairs(faceControls) do
+		local poseData = buildFaceControlPose(faceControls, controlName, t)
+		if poseData then
+			local numberPose = Instance.new("NumberPose")
+			numberPose.Name = controlName
+			numberPose.Value = poseData.value
+			pcall(function()
+				(numberPose :: any).Weight = 1
+			end)
+			numberPose.Parent = folder
+			added = true
+		end
+	end
+
+	if not added then
+		folder:Destroy()
+		return nil
+	end
+
+	return folder
+end
+
+function Rig:LoadAnimation(data, progressCallback: LoadProgressCallback?)
+	-- Validate animation data structure
+	if not data then
+		error("Animation data is nil")
+	end
+
+	if type(data) ~= "table" then
+		error("Animation data is not a table, got: " .. type(data))
+	end
+
+	if not data.kfs or type(data.kfs) ~= "table" then
+		error("Animation data missing keyframes array (data.kfs)")
+	end
+
+	if data.t == nil or type(data.t) ~= "number" then
+		error("Animation data missing duration (data.t)")
+	end
+
+	self:ClearPoses()
+
+	local appliedPoseCount = 0
+
+	local exportInfo = data.export_info
+	local timeScale = 1
+	if type(exportInfo) == "table" then
+		local timeUnit = exportInfo.time_unit
+		if timeUnit == "frames" then
+			local fps = tonumber(exportInfo.fps)
+			if fps and fps > 0 then
+				timeScale = 1 / fps
+			else
+				warn("Animation export_info.time_unit is 'frames' but export_info.fps is missing/invalid.")
+			end
+		end
+	end
+
+	self.animTime = data.t * timeScale
+	self.faceControls = {}
+
+	local totalPoseEntries = 0
+	for keyframeIndex, kfdef in pairs(data.kfs) do
+		if type(kfdef) == "table" and type((kfdef :: any).kf) == "table" then
+			for partName in pairs((kfdef :: any).kf) do
+				if type(partName) == "string" and string.sub(partName, -7) ~= "_deform" then
+					totalPoseEntries += 1
+				end
+			end
+		end
+		if keyframeIndex % 50 == 0 then
+			task.wait()
+		end
+	end
+	local processedPoseCount = 0
+	if progressCallback then
+		progressCallback(0, "Applying poses to rig", string.format("0/%d poses", totalPoseEntries), true)
+	end
+
+	-- Accept both canonical and legacy deform flags.
+	local dataIsDeformRig = data.is_deform_rig or data.is_deform_bone_rig
+	if dataIsDeformRig then
+		self.isDeformRig = true
+
+		-- If we have bone hierarchy data, update our hierarchy.
+		if data.bone_hierarchy then
+			self.boneHierarchy = data.bone_hierarchy
+
+			-- Ensure our RigPart hierarchy matches the exported bone hierarchy.
+			for boneName, parentName in pairs(data.bone_hierarchy) do
+				local bonePart = self:FindRigPart(boneName)
+				if bonePart then
+					bonePart.isDeformBone = true
+
+					-- Set parent relationship if parent exists
+					if parentName then
+						local parentPart = self:FindRigPart(parentName)
+						if parentPart then
+							-- Remove from current parent's children
+							if bonePart.parent then
+								for i, child in ipairs(bonePart.parent.children) do
+									if child == bonePart then
+										table.remove(bonePart.parent.children, i)
+										break
+									end
+								end
+							end
+
+							-- Add to new parent's children
+							bonePart.parent = parentPart
+							table.insert(parentPart.children, bonePart)
+						end
+					end
+				end
+			end
+		end
+	end
+
+	for _, kfdef in pairs(data.kfs) do
+		-- Validate keyframe data
+		if not kfdef.t or type(kfdef.t) ~= "number" then
+			warn("Skipping keyframe with invalid time value")
+			continue
+		end
+
+		local kfTime = kfdef.t * timeScale
+
+		local poseTable = if type(kfdef.kf) == "table" then kfdef.kf else {}
+		local faceTable = if type((kfdef :: any).fc) == "table" then (kfdef :: any).fc else nil
+
+		if next(poseTable) == nil and faceTable == nil then
+			warn("Skipping keyframe with invalid pose data at time " .. kfTime)
+			continue
+		end
+
+		for partName, poseData in pairs(poseTable) do
+			if type(partName) ~= "string" then
+				continue
+			end
+
+			if string.sub(partName, -7) == "_deform" then
+				continue
+			end
+
+			processedPoseCount += 1
+
+			local poseMarksDeform = kfdef.kf[partName .. "_deform"] ~= nil
+			local rigPart = self:FindRigPart(partName)
+			if self._ambiguousAnimationChannels and self._ambiguousAnimationChannels[partName] then
+				error(
+					"AMBIGUOUS ANIMATION CHANNELS DETECTED: "
+						.. partName
+						.. ". Duplicate animated rig part names or conflicting Motor6D aliases are unsupported because animation channels are keyed by name."
+				)
+			end
+			if rigPart and poseData then
+				local cfc
+				local easingStyle = "Linear" -- Default
+				local easingDirection = "In" -- Default
+
+                -- Accept multiple formats:
+                -- 1) New array: [ [components], "EasingStyle"?, "EasingDirection"? ]
+                -- 2) New object: { components = {...}, easingStyle? = "", easingDirection? = "" }
+                -- 3) Legacy: {components...} flat list
+                if type(poseData) == "table" then
+                    if type(poseData[1]) == "table" then
+                        -- array form with nested components
+                        cfc = poseData[1]
+                        if poseData[2] ~= nil then easingStyle = poseData[2] end
+                        if poseData[3] ~= nil then easingDirection = poseData[3] end
+                    elseif poseData.components ~= nil then
+                        -- object/dict form
+                        cfc = poseData.components
+                        if poseData.easingStyle ~= nil then easingStyle = poseData.easingStyle end
+                        if poseData.easingDirection ~= nil then easingDirection = poseData.easingDirection end
+                    else
+                        -- legacy: assume flat list
+                        cfc = poseData
+                    end
+				else
+					-- Fallback for old format (just cframe components)
+					cfc = poseData
+				end
+
+				-- Validate CFrame data
+				if type(cfc) ~= "table" or #cfc < 12 then
+					warn("Invalid CFrame data for part " .. partName .. " at time " .. kfTime)
+					continue
+				end
+
+				-- Ensure all CFrame values are numbers
+				for i = 1, 12 do
+					if type(cfc[i]) ~= "number" then
+						warn("Non-numeric value in CFrame for part " .. partName .. " at time " .. kfTime)
+						cfc[i] = tonumber(cfc[i]) or 0
+					end
+				end
+
+				-- Check if this is a deform bone marker
+				local isDeformBone = false
+				if poseMarksDeform or (dataIsDeformRig and rigPart.part:IsA("Bone")) then
+					isDeformBone = true
+					rigPart.isDeformBone = true
+				end
+
+				-- normalize each rotation vector, falling back to canonical axes if the vector is degenerate
+				for axis = 0, 2 do
+					local x = cfc[4 + axis]
+					local y = cfc[7 + axis]
+					local z = cfc[10 + axis]
+					local lengthSq = x * x + y * y + z * z
+					if lengthSq > 1e-8 then
+						local invLen = 1 / math.sqrt(lengthSq)
+						x *= invLen
+						y *= invLen
+						z *= invLen
+					else
+						if axis == 0 then
+							x, y, z = 1, 0, 0
+						elseif axis == 1 then
+							x, y, z = 0, 1, 0
+						else
+							x, y, z = 0, 0, 1
+						end
+					end
+					cfc[4 + axis], cfc[7 + axis], cfc[10 + axis] = x, y, z
+				end
+
+				rigPart:AddPose(kfTime, CFrame.new(unpack(cfc)), isDeformBone, easingStyle, easingDirection)
+				appliedPoseCount += 1
+				if appliedPoseCount % LOAD_POSE_YIELD_INTERVAL == 0 then
+					if progressCallback then
+						progressCallback(
+							processedPoseCount / math.max(totalPoseEntries, 1),
+							"Applying poses to rig",
+							string.format("%d/%d poses", processedPoseCount, totalPoseEntries),
+							true
+						)
+					end
+					task.wait()
+				end
+			end
+		end
+
+		if faceTable then
+			for controlName, faceData in pairs(faceTable) do
+				if type(controlName) == "string" then
+					local value, easingStyle, easingDirection = decodeFaceControlState(faceData)
+					self.faceControls[controlName] = self.faceControls[controlName] or {}
+					self.faceControls[controlName][kfTime] = {
+						value = value,
+						easingStyle = easingStyle,
+						easingDirection = easingDirection,
+					}
+				end
+			end
+		end
+	end
+
+	if progressCallback then
+		progressCallback(1, "Applied poses to rig", string.format("%d/%d poses", processedPoseCount, totalPoseEntries), true)
+	end
+end
+
+function Rig:ToRobloxAnimation(progressCallback: LoadProgressCallback?)
+	if not self.root then
+		return nil
+	end
+	local kfs = Instance.new("KeyframeSequence")
+	kfs.Loop = self.loop
+	kfs.Priority = self.priority
+	local humanoid = self.model:FindFirstChildOfClass("Humanoid")
+	if humanoid then -- otherwise just use default/is anim controller/...
+		kfs.AuthoredHipHeight = humanoid.HipHeight
+	end
+
+	local allRigParts = self:GetRigParts()
+	if self.root then
+		table.insert(allRigParts, 1, self.root) -- Add root to the beginning of the list to check.
+	end
+
+	local keyframeNames = self.keyframeNames or {}
+	table.sort(keyframeNames, function(a, b)
+		return a.time < b.time
+	end) -- Ensure names are sorted by time
+
+	-- Collect all unique time points from poses and named events
+	local timePoints = { [0] = true } -- Always have a keyframe at t=0
+	for _, rigPart in pairs(allRigParts) do
+		for poseT, _ in pairs(rigPart.poses) do
+			timePoints[poseT] = true
+		end
+	end
+	for _, controlTimeline in pairs(self.faceControls) do
+		for poseT, _ in pairs(controlTimeline) do
+			timePoints[poseT] = true
+		end
+	end
+	for _, kfName in pairs(keyframeNames) do
+		timePoints[kfName.time] = true
+	end
+
+	local sortedTimes = {}
+	for t in pairs(timePoints) do
+		table.insert(sortedTimes, t)
+	end
+	table.sort(sortedTimes)
+
+	local nextKfNameIdx = 1
+	local keyframeCount = 0
+	if progressCallback then
+		progressCallback(0, "Building preview keyframes", string.format("0/%d keyframes", #sortedTimes), true)
+	end
+
+	for _, t in ipairs(sortedTimes) do
+		keyframeCount = keyframeCount + 1
+		if keyframeCount % 100 == 0 then
+			if progressCallback then
+				progressCallback(
+					keyframeCount / math.max(#sortedTimes, 1),
+					"Building preview keyframes",
+					string.format("%d/%d keyframes", keyframeCount, #sortedTimes),
+					true
+				)
+			end
+			task.wait()
+		end
+
+		-- Serialize t
+		local kf = Instance.new("Keyframe")
+		kf.Time = t
+		kf.Parent = kfs
+
+		-- This loop handles multiple named keyframes at the exact same time point
+		-- Use epsilon comparison for floating point times
+		local epsilon = 0.0001
+		while keyframeNames[nextKfNameIdx] and keyframeNames[nextKfNameIdx].time <= t + epsilon do
+			local timeDiff = math.abs(keyframeNames[nextKfNameIdx].time - t)
+			if timeDiff < epsilon then
+				local kfData = keyframeNames[nextKfNameIdx]
+				local markerType = kfData.type or "Name"
+
+				-- If type is "Event", create a KeyframeMarker
+				if markerType == "Event" then
+					local marker = Instance.new("KeyframeMarker")
+					marker.Name = kfData.name
+					if kfData.value and kfData.value ~= "" then
+						marker.Value = kfData.value
+					else
+						marker.Value = ""
+					end
+					kf:AddMarker(marker)
+				else
+					-- Type is "Name", set the keyframe name directly
+					kf.Name = kfData.name
+				end
+			end
+			nextKfNameIdx = nextKfNameIdx + 1
+		end
+
+		local pose = self.root:PoseToRobloxAnimation(t)
+		if pose then
+			pose.Parent = kf
+		end
+
+		local faceFolder = createFaceControlsFolder(self.faceControls, t)
+		if faceFolder then
+			faceFolder.Parent = kf
+		end
+
+		if progressCallback and (keyframeCount % LOAD_KEYFRAME_YIELD_INTERVAL == 0 or keyframeCount == #sortedTimes) then
+			progressCallback(
+				keyframeCount / math.max(#sortedTimes, 1),
+				"Building preview keyframes",
+				string.format("%d/%d keyframes", keyframeCount, #sortedTimes),
+				true
+			)
+		end
+	end
+
+	return kfs
+end
+
+function Rig:EncodeRig(exportWelds: boolean?)
+	-- Actually encode the rig itself; exportWelds controls whether Weld/WeldConstraint joints are included
+	if not self.root then
+		return nil
+	end
+	return self.root:Encode({}, { exportWelds = exportWelds == true })
+end
+
+function Rig:RebuildAsDeformRig()
+	if self.isDeformRig then
+		return
+	end
+
+	print("Rebuilding rig as a deform bone rig...")
+	self.isDeformRig = true
+	self.bones = {}
+	self.bonesByInstance = {}
+	if self.model.PrimaryPart then
+		self.root = RigPart.new(self, self.model.PrimaryPart, nil, true)
+	else
+		warn("Cannot rebuild as deform rig: Model has no PrimaryPart.")
+		self.root = nil
+	end
+	if self.root then -- Only call AddParts if root is not nil
+		self:AddParts(self.root)
+	end
+end
+
+function Rig:AddParts(part)
+	for _, child in pairs(part.children) do
+		if self.bones[child.part.Name] == nil then
+			self.bones[child.part.Name] = child
+		end
+		self.bonesByInstance[child.part] = child
+		self:AddParts(child)
+	end
+end
+
+return Rig
