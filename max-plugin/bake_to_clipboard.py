@@ -144,6 +144,32 @@ def _copy_text_to_windows_clipboard(text: str) -> None:
             kernel32.GlobalFree(handle)
 
 
+def _unique_pose_signature_count(payload_info: dict[str, Any]) -> int:
+    signatures: set[tuple[Any, ...]] = set()
+    keyframes = payload_info.get("kfs")
+    if not isinstance(keyframes, list):
+        return 0
+
+    for keyframe in keyframes:
+        if not isinstance(keyframe, dict):
+            continue
+        pose_table = keyframe.get("kf")
+        if not isinstance(pose_table, dict):
+            continue
+
+        signature: list[Any] = []
+        for name in sorted(pose_table):
+            if str(name).endswith("_deform"):
+                continue
+            pose_data = pose_table.get(name)
+            components = pose_data.get("components") if isinstance(pose_data, dict) else pose_data
+            if isinstance(components, list):
+                signature.append((name, tuple(round(float(value), 4) for value in components[:12])))
+        signatures.add(tuple(signature))
+
+    return len(signatures)
+
+
 def main() -> None:
     adapter = MaxSceneAdapter()
     armature_name = _selected_or_single_armature_name(adapter)
@@ -169,6 +195,13 @@ def main() -> None:
 
     if duration <= 0:
         print("Warning: baked animation duration is 0. Check the Max animation range.")
+    unique_pose_count = _unique_pose_signature_count(payload_info)
+    if keyframe_count > 2 and 0 < unique_pose_count <= 2:
+        print(
+            "Warning: sampled animation has only "
+            f"{unique_pose_count} unique poses across {keyframe_count} keyframes. "
+            "If playback ends immediately, check Max key placement/interpolation and rebake."
+        )
     destination = f"file '{output_path}'" if output_path else "clipboard"
     size_text = (
         f"{output_file.stat().st_size} bytes"

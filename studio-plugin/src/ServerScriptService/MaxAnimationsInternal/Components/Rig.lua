@@ -605,6 +605,37 @@ local function decodeFaceControlState(faceData: any): (number, string, string)
 	return value, easingStyle, easingDirection
 end
 
+local function safeUnitVector(value: Vector3, fallback: Vector3): Vector3
+	if value.Magnitude <= 1e-8 then
+		return fallback
+	end
+	return value.Unit
+end
+
+local function orthonormalizeCFrameComponents(cfc: { any })
+	local right = Vector3.new(cfc[4], cfc[7], cfc[10])
+	local up = Vector3.new(cfc[5], cfc[8], cfc[11])
+	local back = Vector3.new(cfc[6], cfc[9], cfc[12])
+
+	right = safeUnitVector(right, Vector3.new(1, 0, 0))
+	up = up - right * up:Dot(right)
+	if up.Magnitude <= 1e-8 then
+		up = back:Cross(right)
+	end
+	up = safeUnitVector(up, Vector3.new(0, 1, 0))
+
+	local correctedBack = right:Cross(up)
+	if correctedBack:Dot(back) < 0 then
+		up = -up
+		correctedBack = right:Cross(up)
+	end
+	correctedBack = safeUnitVector(correctedBack, Vector3.new(0, 0, 1))
+
+	cfc[4], cfc[7], cfc[10] = right.X, right.Y, right.Z
+	cfc[5], cfc[8], cfc[11] = up.X, up.Y, up.Z
+	cfc[6], cfc[9], cfc[12] = correctedBack.X, correctedBack.Y, correctedBack.Z
+end
+
 local function buildFaceControlPose(
 	faceControls: FaceControls,
 	controlName: string,
@@ -873,28 +904,7 @@ function Rig:LoadAnimation(data, progressCallback: LoadProgressCallback?)
 					rigPart.isDeformBone = true
 				end
 
-				-- normalize each rotation vector, falling back to canonical axes if the vector is degenerate
-				for axis = 0, 2 do
-					local x = cfc[4 + axis]
-					local y = cfc[7 + axis]
-					local z = cfc[10 + axis]
-					local lengthSq = x * x + y * y + z * z
-					if lengthSq > 1e-8 then
-						local invLen = 1 / math.sqrt(lengthSq)
-						x *= invLen
-						y *= invLen
-						z *= invLen
-					else
-						if axis == 0 then
-							x, y, z = 1, 0, 0
-						elseif axis == 1 then
-							x, y, z = 0, 1, 0
-						else
-							x, y, z = 0, 0, 1
-						end
-					end
-					cfc[4 + axis], cfc[7 + axis], cfc[10 + axis] = x, y, z
-				end
+				orthonormalizeCFrameComponents(cfc)
 
 				rigPart:AddPose(kfTime, CFrame.new(unpack(cfc)), isDeformBone, easingStyle, easingDirection)
 				appliedPoseCount += 1

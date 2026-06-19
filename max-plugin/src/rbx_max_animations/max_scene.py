@@ -8,7 +8,7 @@ inside 3ds Max through pymxs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 import json
 import os
 from typing import Any
@@ -24,6 +24,7 @@ except Exception:  # pragma: no cover - pymxs only exists inside 3ds Max.
 
 DEFAULT_FPS = 30.0
 DEFAULT_SAMPLE_STEP = 1.0
+VECTOR_EPSILON = 1e-8
 
 
 def _as_name(value: Any) -> str:
@@ -107,6 +108,58 @@ def _matrix_inverse(matrix: Any) -> Any:
     return matrix.inverse
 
 
+def _vec_dot(left: tuple[float, float, float], right: tuple[float, float, float]) -> float:
+    return left[0] * right[0] + left[1] * right[1] + left[2] * right[2]
+
+
+def _vec_cross(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (
+        left[1] * right[2] - left[2] * right[1],
+        left[2] * right[0] - left[0] * right[2],
+        left[0] * right[1] - left[1] * right[0],
+    )
+
+
+def _vec_sub(left: tuple[float, float, float], right: tuple[float, float, float]) -> tuple[float, float, float]:
+    return (left[0] - right[0], left[1] - right[1], left[2] - right[2])
+
+
+def _vec_mul(value: tuple[float, float, float], scalar: float) -> tuple[float, float, float]:
+    return (value[0] * scalar, value[1] * scalar, value[2] * scalar)
+
+
+def _vec_unit(
+    value: tuple[float, float, float],
+    fallback: tuple[float, float, float],
+) -> tuple[float, float, float]:
+    length_sq = _vec_dot(value, value)
+    if length_sq <= VECTOR_EPSILON:
+        return fallback
+    inv_length = length_sq ** -0.5
+    return (value[0] * inv_length, value[1] * inv_length, value[2] * inv_length)
+
+
+def _orthonormalize_rows(
+    row1: tuple[float, float, float],
+    row2: tuple[float, float, float],
+    row3: tuple[float, float, float],
+) -> tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]:
+    """Remove Max bone scale/shear so Roblox receives a valid rotation matrix."""
+
+    x_axis = _vec_unit(row1, (1.0, 0.0, 0.0))
+    y_axis = _vec_sub(row2, _vec_mul(x_axis, _vec_dot(row2, x_axis)))
+    if _vec_dot(y_axis, y_axis) <= VECTOR_EPSILON:
+        y_axis = _vec_cross(row3, x_axis)
+    y_axis = _vec_unit(y_axis, (0.0, 1.0, 0.0))
+
+    z_axis = _vec_cross(x_axis, y_axis)
+    if _vec_dot(z_axis, row3) < 0:
+        y_axis = _vec_mul(y_axis, -1.0)
+        z_axis = _vec_cross(x_axis, y_axis)
+    z_axis = _vec_unit(z_axis, (0.0, 0.0, 1.0))
+    return x_axis, y_axis, z_axis
+
+
 def _matrix_to_components(matrix: Any, unit_scale: float = 1.0) -> list[float]:
     """Convert a Max Matrix3-like value into Roblox CFrame components.
 
@@ -119,20 +172,25 @@ def _matrix_to_components(matrix: Any, unit_scale: float = 1.0) -> list[float]:
     row2 = matrix.row2
     row3 = matrix.row3
     row4 = matrix.row4
+    clean_row1, clean_row2, clean_row3 = _orthonormalize_rows(
+        (float(row1.x), float(row1.y), float(row1.z)),
+        (float(row2.x), float(row2.y), float(row2.z)),
+        (float(row3.x), float(row3.y), float(row3.z)),
+    )
 
     return [
         float(row4.x) * unit_scale,
         float(row4.y) * unit_scale,
         float(row4.z) * unit_scale,
-        float(row1.x),
-        float(row1.y),
-        float(row1.z),
-        float(row2.x),
-        float(row2.y),
-        float(row2.z),
-        float(row3.x),
-        float(row3.y),
-        float(row3.z),
+        clean_row1[0],
+        clean_row1[1],
+        clean_row1[2],
+        clean_row2[0],
+        clean_row2[1],
+        clean_row2[2],
+        clean_row3[0],
+        clean_row3[1],
+        clean_row3[2],
     ]
 
 
@@ -154,12 +212,12 @@ def _frame_to_time(frame: float) -> Any:
         return frame
 
     try:
-        return rt.frameToTime(frame)
+        return int(round(frame * float(rt.ticksPerFrame)))
     except Exception:
         pass
 
     try:
-        return frame * float(rt.ticksPerFrame)
+        return rt.frameToTime(frame)
     except Exception:
         return frame
 
@@ -197,13 +255,37 @@ def _time_to_frame(time_value: Any) -> float:
     return raw_value
 
 
+@contextmanager
 def _time_context(frame: float):
-    if pymxs is None:
-        return nullcontext()
+    if rt is None:
+        yield
+        return
+
+    time_value = _frame_to_time(frame)
     try:
-        return pymxs.attime(_frame_to_time(frame))
+        time_context = pymxs.attime(time_value) if pymxs is not None else None
     except Exception:
-        return nullcontext()
+        time_context = None
+
+    if time_context is not None:
+        with time_context:
+            yield
+        return
+
+    try:
+        previous_time = rt.sliderTime
+    except Exception:
+        previous_time = None
+
+    try:
+        rt.sliderTime = time_value
+        yield
+    finally:
+        if previous_time is not None:
+            try:
+                rt.sliderTime = previous_time
+            except Exception:
+                pass
 
 
 def _animate_context(enabled: bool):
@@ -349,6 +431,7 @@ class MaxSceneAdapter:
                 "sample_step": self.sample_step,
                 "format": "max-animation-plugin-json-v1",
                 "delta_order": "inverse_rest_times_current",
+                "rotation_basis": "orthonormalized_rows",
                 "target_bone_rest_received": target_bone_rest is not None,
             },
         }
