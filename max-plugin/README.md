@@ -54,7 +54,7 @@ Use this when Studio HTTP/local network access is disabled or unreliable.
 
 1. In 3ds Max, make sure the animated rig node names match the Roblox rig part or bone names.
 2. Start `start_max_animations.ms`.
-3. Select the rig root in Max if the scene has multiple rigs.
+3. Select the rig root in Max if the scene has multiple rigs. If nothing is selected, the baker prefers a rig named `Root`.
 4. Click `Bake Animation to Clipboard`.
 5. In Roblox Studio, select the target rig.
 6. Open `Max Animations`.

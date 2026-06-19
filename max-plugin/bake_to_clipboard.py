@@ -28,7 +28,7 @@ def _selected_or_single_armature_name(adapter: MaxSceneAdapter) -> str:
     if not armatures:
         raise RuntimeError("No exportable Max rig found.")
 
-    armature_names = {str(item.get("name")) for item in armatures if item.get("name")}
+    armature_by_name = {str(item.get("name")): item for item in armatures if item.get("name")}
 
     if rt is not None:
         try:
@@ -43,7 +43,7 @@ def _selected_or_single_armature_name(adapter: MaxSceneAdapter) -> str:
                     node_name = str(node.name)
                 except Exception:
                     node_name = ""
-                if node_name in armature_names:
+                if node_name in armature_by_name:
                     return node_name
                 try:
                     node = node.parent
@@ -53,8 +53,25 @@ def _selected_or_single_armature_name(adapter: MaxSceneAdapter) -> str:
     if len(armatures) == 1:
         return str(armatures[0]["name"])
 
-    names = ", ".join(sorted(armature_names))
-    raise RuntimeError(f"Select one rig root in Max before baking. Available rigs: {names}")
+    for armature in armatures:
+        name = str(armature.get("name") or "")
+        if name.casefold() == "root":
+            print("Multiple rig candidates found; baking 'Root'.")
+            return name
+
+    def score_armature(armature: dict[str, Any]) -> tuple[int, int]:
+        has_animation = 1 if armature.get("has_animation") else 0
+        try:
+            num_bones = int(armature.get("num_bones") or 0)
+        except Exception:
+            num_bones = 0
+        return has_animation, num_bones
+
+    selected = max(armatures, key=score_armature)
+    selected_name = str(selected.get("name") or "")
+    names = ", ".join(sorted(armature_by_name))
+    print(f"Multiple rig candidates found; baking '{selected_name}'. Candidates: {names}")
+    return selected_name
 
 
 def _encode_clipboard_payload(payload: bytes) -> str:
