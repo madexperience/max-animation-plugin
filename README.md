@@ -72,12 +72,12 @@
 
 ## Roblox Studio 플러그인 설치
 
-애니메이터는 빌드 도구 없이 릴리스의 `MaxAnimationsPlugin.rbxm`만 설치하면 됩니다.
+애니메이터는 빌드 도구 없이 [releases/MaxAnimationsPlugin.rbxm](releases/MaxAnimationsPlugin.rbxm) 파일만 설치하면 됩니다.
 
 ```powershell
 $plugins = Join-Path $env:LOCALAPPDATA "Roblox\Plugins"
 New-Item -ItemType Directory -Force $plugins
-Copy-Item .\MaxAnimationsPlugin.rbxm $plugins\MaxAnimationsPlugin.rbxm -Force
+Copy-Item .\releases\MaxAnimationsPlugin.rbxm $plugins\MaxAnimationsPlugin.rbxm -Force
 ```
 
 그 다음 Roblox Studio를 재시작하거나 로컬 플러그인을 reload한 뒤, Plugins 탭의 `Max Animations` 버튼을 열면 됩니다.

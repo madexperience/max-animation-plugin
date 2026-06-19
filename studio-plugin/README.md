@@ -28,7 +28,7 @@ Still WIP:
 
 Animators should not need Rojo, Wally, or Rokit.
 
-1. Download `MaxAnimationsPlugin.rbxm` from the GitHub release.
+1. Download `releases/MaxAnimationsPlugin.rbxm` from this repository.
 2. Copy it into Studio's local plugins folder:
 
    ```powershell

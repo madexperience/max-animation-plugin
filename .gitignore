@@ -20,6 +20,8 @@ upstream-blender-plugin/
 # Roblox / Rojo generated artifacts.
 Packages/
 *.rbxm
+!releases/
+!releases/MaxAnimationsPlugin.rbxm
 *.rbxmx
 *.rbxl
 *.rbxlx
