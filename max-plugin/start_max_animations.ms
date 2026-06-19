@@ -37,18 +37,24 @@
         )
     )
 
-    fn MaxAnimations_applySettings unitScale restFrameMode =
+    fn MaxAnimations_boolString value =
+    (
+        if value then "true" else "false"
+    )
+
+    fn MaxAnimations_applySettings unitScale restFrameMode exportTranslation =
     (
         Environment.SetEnvironmentVariable "RBX_MAX_UNIT_SCALE" (unitScale as string)
         Environment.SetEnvironmentVariable "RBX_MAX_REST_FRAME" restFrameMode
-        python.Execute ("import os; os.environ['RBX_MAX_UNIT_SCALE'] = '" + (unitScale as string) + "'; os.environ['RBX_MAX_REST_FRAME'] = '" + restFrameMode + "'")
+        Environment.SetEnvironmentVariable "RBX_MAX_EXPORT_TRANSLATION" (MaxAnimations_boolString exportTranslation)
+        python.Execute ("import os; os.environ['RBX_MAX_UNIT_SCALE'] = '" + (unitScale as string) + "'; os.environ['RBX_MAX_REST_FRAME'] = '" + restFrameMode + "'; os.environ['RBX_MAX_EXPORT_TRANSLATION'] = '" + (MaxAnimations_boolString exportTranslation) + "'")
     )
 
-    fn MaxAnimations_startServer unitScale restFrameMode =
+    fn MaxAnimations_startServer unitScale restFrameMode exportTranslation =
     (
         if doesFileExist MaxAnimations_pythonEntry then
         (
-            MaxAnimations_applySettings unitScale restFrameMode
+            MaxAnimations_applySettings unitScale restFrameMode exportTranslation
             python.ExecuteFile MaxAnimations_pythonEntry
             true
         )
@@ -59,13 +65,13 @@
         )
     )
 
-    fn MaxAnimations_bakeClipboard unitScale restFrameMode =
+    fn MaxAnimations_bakeClipboard unitScale restFrameMode exportTranslation =
     (
         if doesFileExist MaxAnimations_bakeEntry then
         (
             try
             (
-                MaxAnimations_applySettings unitScale restFrameMode
+                MaxAnimations_applySettings unitScale restFrameMode exportTranslation
                 Environment.SetEnvironmentVariable "RBX_MAX_BAKE_OUTPUT" ""
                 python.ExecuteFile MaxAnimations_bakeEntry
                 true
@@ -83,13 +89,13 @@
         )
     )
 
-    fn MaxAnimations_bakeFile unitScale restFrameMode outputPath =
+    fn MaxAnimations_bakeFile unitScale restFrameMode exportTranslation outputPath =
     (
         if doesFileExist MaxAnimations_bakeEntry then
         (
             try
             (
-                MaxAnimations_applySettings unitScale restFrameMode
+                MaxAnimations_applySettings unitScale restFrameMode exportTranslation
                 Environment.SetEnvironmentVariable "RBX_MAX_BAKE_OUTPUT" outputPath
                 python.ExecuteFile MaxAnimations_bakeEntry
                 Environment.SetEnvironmentVariable "RBX_MAX_BAKE_OUTPUT" ""
@@ -109,13 +115,13 @@
         )
     )
 
-    fn MaxAnimations_inspectAnimation unitScale restFrameMode =
+    fn MaxAnimations_inspectAnimation unitScale restFrameMode exportTranslation =
     (
         if doesFileExist MaxAnimations_inspectEntry then
         (
             try
             (
-                MaxAnimations_applySettings unitScale restFrameMode
+                MaxAnimations_applySettings unitScale restFrameMode exportTranslation
                 python.ExecuteFile MaxAnimations_inspectEntry
                 true
             )
@@ -134,7 +140,7 @@
 
     try (destroyDialog MaxAnimations_Rollout) catch ()
 
-    rollout MaxAnimations_Rollout "Max Animations" width:460 height:440
+    rollout MaxAnimations_Rollout "Max Animations" width:460 height:460
     (
         label titleLabel "Roblox Max Animations" align:#center
         label statusLabel "Status: idle" align:#left
@@ -148,6 +154,7 @@
         spinner unitScaleSpinner "Manual Unit Scale: " range:[0.0001,1000,1] type:#float scale:0.1 fieldwidth:80 align:#left
         dropdownlist restFrameDropdown "Rest Pose: " items:#("End Frame", "Start Frame", "Current Frame") selection:1 width:210 align:#left
         label restFrameNote "Choose the frame that matches the Roblox imported bind pose." align:#left
+        checkbox exportTranslationCheckbox "Export Bone Translation" checked:false align:#left
         button inspectButton "Inspect Animation Data" width:410 height:28 align:#center
         button bakeButton "Bake Animation to Clipboard" width:410 height:28 align:#center
         button bakeFileButton "Bake to File (.rbxanim)" width:410 height:28 align:#center
@@ -160,7 +167,7 @@
 
         on MaxAnimations_Rollout open do
         (
-            if MaxAnimations_startServer unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) then
+            if MaxAnimations_startServer unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) exportTranslationCheckbox.checked then
             (
                 statusLabel.text = "Status: listening on localhost"
             )
@@ -172,7 +179,7 @@
 
         on startButton pressed do
         (
-            if MaxAnimations_startServer unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) then
+            if MaxAnimations_startServer unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) exportTranslationCheckbox.checked then
             (
                 statusLabel.text = "Status: listening on localhost"
             )
@@ -184,7 +191,7 @@
 
         on bakeButton pressed do
         (
-            if MaxAnimations_bakeClipboard unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) then
+            if MaxAnimations_bakeClipboard unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) exportTranslationCheckbox.checked then
             (
                 clipboardStatusLabel.text = "Clipboard: baked animation copied"
             )
@@ -196,17 +203,22 @@
 
         on unitScaleSpinner changed value do
         (
-            MaxAnimations_applySettings value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection)
+            MaxAnimations_applySettings value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) exportTranslationCheckbox.checked
         )
 
         on restFrameDropdown selected itemIndex do
         (
-            MaxAnimations_applySettings unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection itemIndex)
+            MaxAnimations_applySettings unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection itemIndex) exportTranslationCheckbox.checked
+        )
+
+        on exportTranslationCheckbox changed value do
+        (
+            MaxAnimations_applySettings unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) value
         )
 
         on inspectButton pressed do
         (
-            if MaxAnimations_inspectAnimation unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) then
+            if MaxAnimations_inspectAnimation unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) exportTranslationCheckbox.checked then
             (
                 clipboardStatusLabel.text = "Inspect: see Max Listener"
             )
@@ -221,7 +233,7 @@
             local outputPath = getSaveFileName caption:"Bake Roblox Animation" filename:"animation.rbxanim" types:"Roblox Animation (*.rbxanim)|*.rbxanim|All Files (*.*)|*.*|"
             if outputPath != undefined then
             (
-                if MaxAnimations_bakeFile unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) outputPath then
+                if MaxAnimations_bakeFile unitScaleSpinner.value (MaxAnimations_restFrameModeFromSelection restFrameDropdown.selection) exportTranslationCheckbox.checked outputPath then
                 (
                     clipboardStatusLabel.text = "File: baked animation saved"
                 )

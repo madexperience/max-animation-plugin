@@ -311,6 +311,7 @@ def main() -> None:
     fps = export_info.get("fps")
     rest_frame = export_info.get("rest_frame")
     rest_frame_source = export_info.get("rest_frame_source")
+    export_translation = export_info.get("export_translation")
 
     print("=== Max Animation Inspect ===")
     print(f"Rig: {armature_name}")
@@ -319,6 +320,8 @@ def main() -> None:
     print(f"Frame range: {frame_range} @ {fps} fps")
     if rest_frame is not None:
         print(f"Rest pose frame: {rest_frame} ({rest_frame_source or 'unknown'})")
+    if export_translation is not None:
+        print(f"Export bone translation: {export_translation}")
 
     if not keyframes:
         print("No sampled keyframes.")

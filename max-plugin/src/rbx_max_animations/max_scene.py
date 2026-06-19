@@ -25,6 +25,7 @@ except Exception:  # pragma: no cover - pymxs only exists inside 3ds Max.
 DEFAULT_FPS = 30.0
 DEFAULT_SAMPLE_STEP = 1.0
 DEFAULT_REST_FRAME = "end"
+DEFAULT_EXPORT_TRANSLATION = False
 VECTOR_EPSILON = 1e-8
 
 
@@ -195,7 +196,11 @@ def _matrix_to_components(matrix: Any, unit_scale: float = 1.0) -> list[float]:
     ]
 
 
-def _deform_delta_to_components(matrix: Any, unit_scale: float = 1.0) -> list[float]:
+def _deform_delta_to_components(
+    matrix: Any,
+    unit_scale: float = 1.0,
+    export_translation: bool = DEFAULT_EXPORT_TRANSLATION,
+) -> list[float]:
     row1 = matrix.row1
     row2 = matrix.row2
     row3 = matrix.row3
@@ -211,10 +216,16 @@ def _deform_delta_to_components(matrix: Any, unit_scale: float = 1.0) -> list[fl
         for row_index in range(3)
     ]
 
+    position = (
+        (-float(row4.x) * unit_scale, float(row4.y) * unit_scale, -float(row4.z) * unit_scale)
+        if export_translation
+        else (0.0, 0.0, 0.0)
+    )
+
     return [
-        -float(row4.x) * unit_scale,
-        float(row4.y) * unit_scale,
-        -float(row4.z) * unit_scale,
+        position[0],
+        position[1],
+        position[2],
         swizzled_rows[0][0],
         swizzled_rows[0][1],
         swizzled_rows[0][2],
@@ -405,6 +416,13 @@ def _rest_frame_from_env(frame_start: float, frame_end: float) -> tuple[float, s
         return frame_end, "end"
 
 
+def _export_translation_from_env() -> bool:
+    raw = os.environ.get("RBX_MAX_EXPORT_TRANSLATION", "")
+    if raw == "":
+        return DEFAULT_EXPORT_TRANSLATION
+    return raw.strip().casefold() in ("1", "true", "yes", "on")
+
+
 @dataclass
 class MaxSceneAdapter:
     """Scene operations required by the Studio protocol."""
@@ -494,6 +512,7 @@ class MaxSceneAdapter:
         rest_locals = self._capture_local_matrices(nodes, rest_frame)
         parent_names = self._parent_names(nodes)
         unit_scale = self._unit_scale()
+        export_translation = _export_translation_from_env()
 
         keyframes: list[dict[str, Any]] = []
         frame = frame_start
@@ -511,7 +530,7 @@ class MaxSceneAdapter:
                 # rest CFrame, so currentLocal = restLocal * delta.
                 delta = _matrix_inverse(rest_local) * current_local
                 pose_table[name] = {
-                    "components": _deform_delta_to_components(delta, unit_scale),
+                    "components": _deform_delta_to_components(delta, unit_scale, export_translation),
                     "easingStyle": "Linear",
                     "easingDirection": "In",
                 }
@@ -538,6 +557,7 @@ class MaxSceneAdapter:
                 "frame_range": [frame_start, frame_end],
                 "rest_frame": rest_frame,
                 "rest_frame_source": rest_frame_source,
+                "export_translation": export_translation,
                 "sample_step": self.sample_step,
                 "format": "max-animation-plugin-json-v1",
                 "delta_order": "inverse_rest_times_current",

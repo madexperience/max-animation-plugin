@@ -61,13 +61,14 @@ Use this when Studio HTTP/local network access is disabled or unreliable.
 3. Select the rig root in Max if the scene has multiple rigs. If nothing is selected, the baker prefers a rig named `Root`.
 4. Leave `Full Range Bake` on. The baker uses the active 3ds Max animation range.
 5. Set `Rest Pose` to the frame that matches the Roblox imported bind pose. For example, if the model's normal pose is an open book but frame 0 is closed, use `End Frame`.
-6. If the imported motion scale is wrong, adjust `Manual Unit Scale` and bake again.
-7. Optional: click `Inspect Animation Data` and check the 3ds Max Listener. If every bone has only one or two unique poses, the animation is probably not keyed on the exported rig nodes.
-8. Click `Bake Animation to Clipboard`.
-9. In Roblox Studio, select the target rig.
-10. Open `Max Animations`.
-11. In `Legacy Import`, click `Import Animation from Clipboard`.
-12. Paste the copied text into the opened Studio script.
+6. Leave `Export Bone Translation` off for normal hinged/rotating bone animation. Turn it on only if the Max bones intentionally have animated local position.
+7. If the imported motion scale is wrong, adjust `Manual Unit Scale` and bake again.
+8. Optional: click `Inspect Animation Data` and check the 3ds Max Listener. If every bone has only one or two unique poses, the animation is probably not keyed on the exported rig nodes.
+9. Click `Bake Animation to Clipboard`.
+10. In Roblox Studio, select the target rig.
+11. Open `Max Animations`.
+12. In `Legacy Import`, click `Import Animation from Clipboard`.
+13. Paste the copied text into the opened Studio script.
 
 ### Option B: File bake
 
@@ -93,7 +94,7 @@ Use this when Studio has local HTTP/plugin network access enabled.
 7. Select the Max armature.
 8. Click `Import Animation from Max`.
 
-The bridge samples the active Max animation range at one key per frame. Set the scene animation range before exporting. The frame rate does not need to be fixed at 60 FPS; Roblox keyframes are timed in seconds, so 30 FPS frame 0-30 and 60 FPS frame 0-60 both bake as 1 second. `Rest Pose` must match the Roblox rig's default/bind pose, not necessarily the first animation frame.
+The bridge samples the active Max animation range at one key per frame. Set the scene animation range before exporting. The frame rate does not need to be fixed at 60 FPS; Roblox keyframes are timed in seconds, so 30 FPS frame 0-30 and 60 FPS frame 0-60 both bake as 1 second. `Rest Pose` must match the Roblox rig's default/bind pose, not necessarily the first animation frame. `Export Bone Translation` defaults off because FBX dummy hierarchies often produce local translation deltas even for rotation-only bone motion.
 
 After baking, the 3ds Max Listener should report a useful range, for example:
 

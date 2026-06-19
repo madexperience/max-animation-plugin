@@ -186,6 +186,10 @@ def main() -> None:
     rest_frame_text = ""
     if rest_frame is not None:
         rest_frame_text = f", rest frame {float(rest_frame):.3f}"
+    export_translation = export_info.get("export_translation") if isinstance(export_info, dict) else None
+    translation_text = ""
+    if export_translation is not None:
+        translation_text = f", translation {'on' if export_translation else 'off'}"
 
     output_path = os.environ.get("RBX_MAX_BAKE_OUTPUT", "").strip()
     if output_path:
@@ -215,7 +219,7 @@ def main() -> None:
     print(
         f"Baked Roblox animation to {destination} "
         f"from '{armature_name}' ({keyframe_count} keyframes, {duration:.3f}s"
-        f"{frame_range_text}{rest_frame_text}, {size_text})."
+        f"{frame_range_text}{rest_frame_text}{translation_text}, {size_text})."
     )
 
 
