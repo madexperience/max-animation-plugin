@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import ctypes
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -86,6 +87,10 @@ def _encode_clipboard_payload(payload: bytes) -> str:
     return base64.b64encode(compressed).decode("ascii")
 
 
+def _compressed_file_payload(payload: bytes) -> bytes:
+    return zlib.compress(payload, 9)
+
+
 def _copy_text_to_windows_clipboard(text: str) -> None:
     user32 = ctypes.windll.user32
     kernel32 = ctypes.windll.kernel32
@@ -151,15 +156,29 @@ def main() -> None:
     frame_range_text = ""
     if isinstance(frame_range, list) and len(frame_range) >= 2:
         frame_range_text = f", frames {float(frame_range[0]):.3f}-{float(frame_range[1]):.3f}"
-    clipboard_text = _encode_clipboard_payload(payload)
-    _copy_text_to_windows_clipboard(clipboard_text)
+
+    output_path = os.environ.get("RBX_MAX_BAKE_OUTPUT", "").strip()
+    if output_path:
+        output_file = Path(output_path)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        file_payload = _compressed_file_payload(payload)
+        output_file.write_bytes(file_payload)
+    else:
+        clipboard_text = _encode_clipboard_payload(payload)
+        _copy_text_to_windows_clipboard(clipboard_text)
+
     if duration <= 0:
         print("Warning: baked animation duration is 0. Check the Max animation range.")
+    destination = f"file '{output_path}'" if output_path else "clipboard"
+    size_text = (
+        f"{output_file.stat().st_size} bytes"
+        if output_path
+        else f"{len(clipboard_text)} base64 chars"
+    )
     print(
-        "Baked Roblox animation to clipboard "
+        f"Baked Roblox animation to {destination} "
         f"from '{armature_name}' ({keyframe_count} keyframes, {duration:.3f}s"
-        f"{frame_range_text}, "
-        f"{len(clipboard_text)} base64 chars)."
+        f"{frame_range_text}, {size_text})."
     )
 
 

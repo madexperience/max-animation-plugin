@@ -12,17 +12,26 @@
     global MaxAnimations_bakeEntry
     global MaxAnimations_startServer
     global MaxAnimations_bakeClipboard
+    global MaxAnimations_bakeFile
+    global MaxAnimations_applySettings
 
     local Path = dotNetClass "System.IO.Path"
+    local Environment = dotNetClass "System.Environment"
     local scriptFile = getSourceFileName()
     local scriptDir = getFilenamePath scriptFile
     MaxAnimations_pythonEntry = Path.Combine scriptDir "start_max_server.py"
     MaxAnimations_bakeEntry = Path.Combine scriptDir "bake_to_clipboard.py"
 
-    fn MaxAnimations_startServer =
+    fn MaxAnimations_applySettings unitScale =
+    (
+        Environment.SetEnvironmentVariable "RBX_MAX_UNIT_SCALE" (unitScale as string)
+    )
+
+    fn MaxAnimations_startServer unitScale =
     (
         if doesFileExist MaxAnimations_pythonEntry then
         (
+            MaxAnimations_applySettings unitScale
             python.ExecuteFile MaxAnimations_pythonEntry
             true
         )
@@ -33,12 +42,14 @@
         )
     )
 
-    fn MaxAnimations_bakeClipboard =
+    fn MaxAnimations_bakeClipboard unitScale =
     (
         if doesFileExist MaxAnimations_bakeEntry then
         (
             try
             (
+                MaxAnimations_applySettings unitScale
+                Environment.SetEnvironmentVariable "RBX_MAX_BAKE_OUTPUT" ""
                 python.ExecuteFile MaxAnimations_bakeEntry
                 true
             )
@@ -55,28 +66,58 @@
         )
     )
 
+    fn MaxAnimations_bakeFile unitScale outputPath =
+    (
+        if doesFileExist MaxAnimations_bakeEntry then
+        (
+            try
+            (
+                MaxAnimations_applySettings unitScale
+                Environment.SetEnvironmentVariable "RBX_MAX_BAKE_OUTPUT" outputPath
+                python.ExecuteFile MaxAnimations_bakeEntry
+                Environment.SetEnvironmentVariable "RBX_MAX_BAKE_OUTPUT" ""
+                true
+            )
+            catch
+            (
+                Environment.SetEnvironmentVariable "RBX_MAX_BAKE_OUTPUT" ""
+                messageBox ("Bake to file failed:\n" + getCurrentException()) title:"Max Animations"
+                false
+            )
+        )
+        else
+        (
+            messageBox ("Could not find bake_to_clipboard.py next to:\n" + MaxAnimations_bakeEntry) title:"Max Animations"
+            false
+        )
+    )
+
     try (destroyDialog MaxAnimations_Rollout) catch ()
 
-    rollout MaxAnimations_Rollout "Max Animations" width:440 height:300
+    rollout MaxAnimations_Rollout "Max Animations" width:460 height:370
     (
         label titleLabel "Roblox Max Animations" align:#center
         label statusLabel "Status: idle" align:#left
         label portLabel "Port: 127.0.0.1:31337" align:#left
-        button startButton "Start / Restart Local Server" width:390 height:28 align:#center
+        button startButton "Start / Restart Local Server" width:410 height:28 align:#center
         label spacer1 "" height:6
         label directLabel "Direct import: Studio -> Connect -> Import Animation from Max." align:#left
         label directNote "Requires Studio local HTTP permission." align:#left
         label spacer2 "" height:6
-        button bakeButton "Bake Animation to Clipboard" width:390 height:28 align:#center
+        checkbox fullRangeCheckbox "Full Range Bake" checked:true enabled:false align:#left
+        spinner unitScaleSpinner "Manual Unit Scale: " range:[0.0001,1000,1] type:#float scale:0.1 fieldwidth:80 align:#left
+        button bakeButton "Bake Animation to Clipboard" width:410 height:28 align:#center
+        button bakeFileButton "Bake to File (.rbxanim)" width:410 height:28 align:#center
         label clipboardStatusLabel "Clipboard: idle" align:#left
         label clipLabel1 "Clipboard import: bake here, then Studio Legacy Import -> Clipboard." align:#left
-        label clipLabel2 "Paste the copied text into the opened Studio script." align:#left
+        label clipLabel2 "File import: Studio Legacy Import -> Import Animation from File(s)." align:#left
+        label clipLabel3 "Clipboard import: paste the copied text into the opened Studio script." align:#left
         label spacer3 "" height:6
         label noteLabel "Select the rig root in Max when multiple rigs are in the scene." align:#left
 
         on MaxAnimations_Rollout open do
         (
-            if MaxAnimations_startServer() then
+            if MaxAnimations_startServer unitScaleSpinner.value then
             (
                 statusLabel.text = "Status: listening on localhost"
             )
@@ -88,7 +129,7 @@
 
         on startButton pressed do
         (
-            if MaxAnimations_startServer() then
+            if MaxAnimations_startServer unitScaleSpinner.value then
             (
                 statusLabel.text = "Status: listening on localhost"
             )
@@ -100,13 +141,34 @@
 
         on bakeButton pressed do
         (
-            if MaxAnimations_bakeClipboard() then
+            if MaxAnimations_bakeClipboard unitScaleSpinner.value then
             (
                 clipboardStatusLabel.text = "Clipboard: baked animation copied"
             )
             else
             (
                 clipboardStatusLabel.text = "Clipboard: bake failed"
+            )
+        )
+
+        on unitScaleSpinner changed value do
+        (
+            MaxAnimations_applySettings value
+        )
+
+        on bakeFileButton pressed do
+        (
+            local outputPath = getSaveFileName caption:"Bake Roblox Animation" filename:"animation.rbxanim" types:"Roblox Animation (*.rbxanim)|*.rbxanim|All Files (*.*)|*.*|"
+            if outputPath != undefined then
+            (
+                if MaxAnimations_bakeFile unitScaleSpinner.value outputPath then
+                (
+                    clipboardStatusLabel.text = "File: baked animation saved"
+                )
+                else
+                (
+                    clipboardStatusLabel.text = "File: bake failed"
+                )
             )
         )
     )

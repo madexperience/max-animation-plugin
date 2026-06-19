@@ -15,6 +15,10 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 31337
 
 
+class MaxAnimationHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
+
 class MaxAnimationHandler(BaseHTTPRequestHandler):
     adapter = MaxSceneAdapter()
 
@@ -131,7 +135,7 @@ class MaxAnimationHandler(BaseHTTPRequestHandler):
 
 
 def start_server(host: str = DEFAULT_HOST, port: int = DEFAULT_PORT) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer((host, port), MaxAnimationHandler)
+    server = MaxAnimationHTTPServer((host, port), MaxAnimationHandler)
     server.daemon_threads = True
 
     # In 3ds Max this is a development bridge. Real scene operations must be
