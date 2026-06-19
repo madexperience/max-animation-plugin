@@ -121,9 +121,6 @@ local State = {
     -- Toolbar button image
     toolbarButtonImage = Value("rbxassetid://116041192227009"),
 
-    -- Help widget
-    helpWidgetEnabled = Value(false),
-
     -- Service references
     rigManager = nil :: any?,
 }

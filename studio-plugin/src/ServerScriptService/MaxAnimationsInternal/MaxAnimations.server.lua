@@ -41,10 +41,7 @@ local StudioComponents = Components:FindFirstChild("StudioComponents")
 
 local ScrollFrame = require(StudioComponents.ScrollFrame)
 local Button = require(StudioComponents.Button)
-local Label = require(StudioComponents.Label)
 local Loading = require(StudioComponents.Loading)
-local TextInput = require(StudioComponents.TextInput)
-local VerticalCollapsibleSection = require(StudioComponents.VerticalCollapsibleSection)
 
 local StudioComponentsUtil = StudioComponents:FindFirstChild("Util")
 local themeProvider = require(StudioComponentsUtil.themeProvider)
@@ -291,7 +288,6 @@ do -- Creates the plugin
 	)
 
 	State.widgetsEnabled = Value(false)
-	State.helpWidgetEnabled = Value(false)
 
 	-- Update image based on current theme using themeProvider like PlaybackControls
 	local function updateToolbarImage()
@@ -317,19 +313,6 @@ do -- Creates the plugin
 
 		[OnEvent("Click")] = function()
 			(State.widgetsEnabled :: any):set(not (State.widgetsEnabled :: any):get())
-		end,
-	})
-
-	local helpButton = ToolbarButton({
-		Plugin = Plugin,
-		Toolbar = pluginToolbar,
-		ClickableWhenViewportHidden = true,
-		Name = "READ!!!",
-		ToolTip = "Open Help Widget",
-		Image = "rbxassetid://112326668147130",
-
-		[OnEvent("Click")] = function()
-			(State.helpWidgetEnabled :: any):set(not (State.helpWidgetEnabled :: any):get())
 		end,
 	})
 
@@ -373,17 +356,6 @@ do -- Creates the plugin
 				end
 				if isEnabled then
 					updateActiveRigFromSelection()
-				end
-				return nil
-			end) :: any
-	)
-
-	-- Handle help widget enabled/disabled
-	table.insert(
-		State.observers,
-		(Observer(State.helpWidgetEnabled :: any) :: any):onChange(function(isEnabled: boolean)
-				if helpButton and helpButton.Parent then
-					helpButton:SetActive(isEnabled)
 				end
 				return nil
 			end) :: any
@@ -684,12 +656,6 @@ do -- Creates the plugin
 		end
 	end
 
-	local function handleHelpWidgetEnabledChanged(isEnabled: boolean)
-		if State.helpWidgetEnabled:get() ~= isEnabled then
-			(State.helpWidgetEnabled :: any):set(isEnabled)
-		end
-	end
-
 	-- Create the main widget
 	local function pluginWidget()
 		return Widget({
@@ -766,75 +732,6 @@ do -- Creates the plugin
 	end))
 	mainWidget:BindToClose(function()
 		handleMainWidgetEnabledChanged(false)
-	end)
-
-	-- Create the help widget
-	local helpWidget = Widget({
-		Plugin = Plugin,
-		Id = "MaxAnimationsHelp",
-		Name = "IMPORTANT READ ME!!!",
-		InitialDockTo = Enum.InitialDockState.Float,
-		InitialEnabled = false,
-		ForceInitialEnabled = false,
-		FloatingSize = Vector2.new(400, 500),
-		MinimumSize = Vector2.new(400, 500),
-		Enabled = State.helpWidgetEnabled,
-		[Children] = {
-			New("UIPadding")({
-				PaddingLeft = UDim.new(0, 10),
-				PaddingRight = UDim.new(0, 10),
-				PaddingTop = UDim.new(0, 16),
-				PaddingBottom = UDim.new(0, 16),
-			}),
-			New("UIListLayout")({
-				SortOrder = Enum.SortOrder.LayoutOrder,
-				Padding = UDim.new(0, 8),
-			}),
-			VerticalCollapsibleSection({
-				Text = "MAX PORT SETUP",
-				Collapsed = false,
-				LayoutOrder = 2,
-				[Children] = {
-					New("Frame")({
-						Size = UDim2.new(1, 0, 0, 64),
-						BackgroundTransparency = 1,
-						LayoutOrder = 1,
-						[Children] = {
-							New("ImageLabel")({
-								Size = UDim2.new(0, 64, 0, 64),
-								Position = UDim2.new(0.5, 0, 0.5, 0),
-								AnchorPoint = Vector2.new(0.5, 0.5),
-								BackgroundTransparency = 1,
-								Image = "rbxassetid://92189642379919",
-							}),
-						},
-					}),
-					Label({
-						LayoutOrder = 1,
-						Text = "Install and run the 3ds Max companion plugin from this repository, then connect from the Max Sync controls. Clipboard and file import/export can still be enabled from the More tab while the server pipeline is being completed.",
-						TextWrapped = true,
-					}),
-					TextInput({
-						LayoutOrder = 2,
-						Text = "https://github.com/madexperience/max-animation-plugin",
-					}),
-					TextInput({
-						LayoutOrder = 3,
-						Text = "https://github.com/madexperience/max-animation-plugin/blob/main/studio-plugin/README.md",
-					}),
-					TextInput({
-						LayoutOrder = 4,
-						Text = "Run max-plugin/start_max_server.py in 3ds Max, then connect to port 31337.",
-					}),
-				},
-			}),
-		},
-	})
-	table.insert(State.connections, helpWidget:GetPropertyChangedSignal("Enabled"):Connect(function()
-		handleHelpWidgetEnabledChanged(helpWidget.Enabled)
-	end))
-	helpWidget:BindToClose(function()
-		handleHelpWidgetEnabledChanged(false)
 	end)
 end
 

@@ -5,177 +5,21 @@
 local State = require(script.Parent.Parent.Parent.state)
 local Fusion = require(script.Parent.Parent.Parent.Packages.Fusion)
 
-local _New = Fusion.New
 local Children = Fusion.Children
-local _OnChange = Fusion.OnChange
 local OnEvent = Fusion.OnEvent
 local Value = Fusion.Value
-local _Computed = Fusion.Computed
 
 local StudioComponents = script.Parent.Parent.Parent.Components:FindFirstChild("StudioComponents")
 local Checkbox = require(StudioComponents.Checkbox)
 local Label = require(StudioComponents.Label)
-local TextInput = require(StudioComponents.TextInput)
 local VerticalCollapsibleSection = require(StudioComponents.VerticalCollapsibleSection)
-
-local StudioComponentsUtil = StudioComponents:FindFirstChild("Util")
-local _themeProvider = require(StudioComponentsUtil.themeProvider)
 
 local SharedComponents = require(script.Parent.Parent.SharedComponents)
 
--- Donation supporters data: {userId = color} -- username fetched dynamically via Players:GetNameFromUserIdAsync
--- If you're wondering about the color choice I personally pick them out based on what I think you would like
-local DONATION_SUPPORTERS = {
-    [1505918452] = "#9e4aff", -- JPlayHD
-    [51636134] = "#d63838", -- AltiWyre
-    [1418691708] = "#14acc7", -- jasper_creations
-    [3414432341] = "#9da4bd", -- egor77
-    [1388391899] = "#aed5f2", -- SlussBat
-    [376669425] = "#87d68b", -- Phirsts
-	[712807502] = "#ff708d", -- Tsuwukiz
-	[117931886] = "#eba8f7", -- raddoob
-	[1645075123] = "#f2b161", -- roffcat
-	[25461577] = "#ed7b87", -- 144hertz
-	[25637687] = "#fa9c50", -- TB_Glitch
-	[7445318360] = "#5865f2", -- Rubasta1945
-	[116174560] = "#fc0398", -- N4Animation
-	[1129195252] = "#6a71ba", -- Wingboy0
-	[1552097906] = "#e8c5e3", -- megeservice
-	[7180198] = "#7b5bbd", -- ZacAttackk
-	[2038901944] = "#9900ff", -- Aeresei
-	[2238155578] = "#63a2d6", -- KGxStar1
-	[44780781] = "#c8adde", -- OneSpottedFriend
-	[91427417] = "#a5ccb1", -- Pigeon
-	[1045107396] = "#5da4c2", -- AuroraSharky
-	[1109656080] = "#db3e39", -- FNTDrippy
-	[10333709] = "#c250cc", -- Setalcix
-	[291518017] = "#8a757b", -- aloneluvsya
-	[74229507] = "#618c6b", -- Psychem
-
-
-
-}
-
 local MoreTab = {}
-
--- Cache for generated thank you text
-local _cachedThankYouText = nil
-local _thankYouTextLoaded = false
-
--- Function to generate thank you text from supporters data (internal)
-local function _generateThankYouText(): string
-    -- Safely attempt to generate the thank you text with comprehensive error handling
-    local success, result = pcall(function()
-        local supportersText = "Thank you to all of those who have supported me in the development of this plugin, special shoutout to "
-
-        local supporterEntries = {}
-
-        -- Safely get Players service
-        local Players
-        local playersSuccess, playersResult = pcall(function()
-            return game:GetService("Players")
-        end)
-
-		if not playersSuccess then
-            -- Fallback: show supporters without usernames
-            for userId, color in pairs(DONATION_SUPPORTERS) do
-                table.insert(supporterEntries, string.format("<font color='%s'>Supporter %s</font>", color, tostring(userId)))
-            end
-            table.insert(supporterEntries, "and everyone else who has supported me!")
-            return supportersText .. table.concat(supporterEntries, ", ") .. "."
-        end
-
-        Players = playersResult
-
-        for userId, color in pairs(DONATION_SUPPORTERS) do
-            local username = "Unknown"
-            local apiSuccess, apiResult = pcall(function()
-                return Players:GetNameFromUserIdAsync(userId)
-            end)
-
-			if apiSuccess and apiResult then
-				username = apiResult
-			else
-                -- Fallback to User + ID for display
-                username = "User" .. tostring(userId)
-            end
-
-            -- Safely format the supporter entry
-			local formatSuccess, formattedEntry = pcall(function()
-                return string.format("<font color='%s'>%s</font>", color, username)
-            end)
-
-            if formatSuccess then
-                table.insert(supporterEntries, formattedEntry)
-            else
-                table.insert(supporterEntries, string.format("<font color='%s'>Supporter %s</font>", color, tostring(userId)))
-            end
-        end
-
-        -- Add "and everyone else who has supported me!" at the end
-        table.insert(supporterEntries, "and everyone else who has supported me!")
-
-        -- Safely concatenate the entries
-		local concatSuccess, finalText = pcall(function()
-            return supportersText .. table.concat(supporterEntries, ", ")
-        end)
-
-        if concatSuccess then
-            return finalText
-        else
-            return supportersText .. "our amazing supporters!"
-        end
-    end)
-
-    if success then
-        return result
-    else
-        -- Ultimate fallback
-        return "Thank you to all of those who have supported me in the development of this plugin!"
-    end
-end
-
--- Function to preload thank you text (call when support section is opened)
-local function _preloadThankYouText(): nil
-    if not _thankYouTextLoaded then
-        local success, generatedText = pcall(_generateThankYouText)
-		if success and generatedText then
-            _cachedThankYouText = generatedText
-            _thankYouTextLoaded = true
-            print("Preloaded donation supporters text")
-        else
-            -- Still mark as loaded to avoid repeated attempts
-            _thankYouTextLoaded = true
-        end
-    end
-    return nil
-end
-
--- Function to get cached thank you text or generate it
-local function getThankYouText(): string
-    if _cachedThankYouText and _thankYouTextLoaded then
-        return _cachedThankYouText
-    end
-
-    -- Generate the text if not cached
-    local success, generatedText = pcall(_generateThankYouText)
-	if success and generatedText then
-        _cachedThankYouText = generatedText
-        _thankYouTextLoaded = true
-        return generatedText
-    else
-        -- Return a safe fallback
-        local fallbackText = "Thank you to all of those who have supported me in the development of this plugin!"
-        _cachedThankYouText = fallbackText
-        _thankYouTextLoaded = true
-        return fallbackText
-    end
-end
-
 
 function MoreTab.create(services: any)
 	local activeHint = Value("")
-	local thankYouText = Value("Loading supporters...") -- Initial placeholder text
 
 	return {
 		VerticalCollapsibleSection({
@@ -183,33 +27,33 @@ function MoreTab.create(services: any)
 			Collapsed = false,
 			LayoutOrder = 1,
 			[Children] = {
-                Checkbox({
+				Checkbox({
 					Value = State.enableFileExport,
 					Text = "Enable File Export",
 					LayoutOrder = 1,
 					OnChange = function(enabled: boolean): nil
-                        State.enableFileExport:set(enabled)
-                        services.plugin:SetSetting("EnableFileExport", enabled)
+						State.enableFileExport:set(enabled)
+						services.plugin:SetSetting("EnableFileExport", enabled)
 						return nil
 					end,
 					[OnEvent("MouseEnter")] = function()
-						activeHint:set("Allows exporting animations to files from Max.")
+						activeHint:set("Allows importing animations from files.")
 					end,
 					[OnEvent("MouseLeave")] = function()
 						activeHint:set("")
 					end,
 				}),
-                Checkbox({
+				Checkbox({
 					Value = State.enableClipboardExport,
 					Text = "Enable Clipboard Export",
 					LayoutOrder = 2,
 					OnChange = function(enabled: boolean): nil
-                        State.enableClipboardExport:set(enabled)
-                        services.plugin:SetSetting("EnableClipboardExport", enabled)
+						State.enableClipboardExport:set(enabled)
+						services.plugin:SetSetting("EnableClipboardExport", enabled)
 						return nil
 					end,
 					[OnEvent("MouseEnter")] = function()
-						activeHint:set("Allows exporting animations to clipboard from Max.")
+						activeHint:set("Allows importing animations from the clipboard.")
 					end,
 					[OnEvent("MouseLeave")] = function()
 						activeHint:set("")
@@ -222,36 +66,36 @@ function MoreTab.create(services: any)
 			Collapsed = false,
 			LayoutOrder = 2,
 			[Children] = {
-                Checkbox({
+				Checkbox({
 					Value = State.enableLiveSync,
 					Text = "Enable Live Sync",
 					LayoutOrder = 1,
 					OnChange = function(enabled: boolean): nil
 						State.enableLiveSync:set(enabled)
-                        services.plugin:SetSetting("EnableLiveSync", enabled)
+						services.plugin:SetSetting("EnableLiveSync", enabled)
 						if not enabled then
 							services.maxSyncManager:stopLiveSyncing()
 						end
 						return nil
 					end,
 					[OnEvent("MouseEnter")] = function()
-						activeHint:set("Automatically syncs animations from Max to Roblox in real-time.")
+						activeHint:set("Automatically syncs animations from Max to Roblox.")
 					end,
 					[OnEvent("MouseLeave")] = function()
 						activeHint:set("")
 					end,
 				}),
-                Checkbox({
+				Checkbox({
 					Value = State.autoConnectToMax,
 					Text = "Auto-connect to Max",
 					LayoutOrder = 2,
 					OnChange = function(enabled: boolean): nil
-                        State.autoConnectToMax:set(enabled)
-                        services.plugin:SetSetting("AutoConnectToMax", enabled)
+						State.autoConnectToMax:set(enabled)
+						services.plugin:SetSetting("AutoConnectToMax", enabled)
 						return nil
 					end,
 					[OnEvent("MouseEnter")] = function()
-						activeHint:set("Automatically connects to Max when the plugin starts.")
+						activeHint:set("Connects to Max automatically when the plugin opens.")
 					end,
 					[OnEvent("MouseLeave")] = function()
 						activeHint:set("")
@@ -287,83 +131,14 @@ function MoreTab.create(services: any)
 		}),
 		VerticalCollapsibleSection({
 			Text = "About",
-			Collapsed = false,
+			Collapsed = true,
 			LayoutOrder = 5,
 			[Children] = {
-				Fusion.New("Frame")({
-					Size = UDim2.new(1, 0, 0, 64),
-					BackgroundTransparency = 1,
+				Label({
 					LayoutOrder = 1,
-					[Children] = {
-						Fusion.New("ImageLabel")({
-							Size = UDim2.new(0, 64, 0, 64),
-							Position = UDim2.new(0.5, 0, 0.5, 0),
-							AnchorPoint = Vector2.new(0.5, 0.5),
-							BackgroundTransparency = 1,
-							Image = "rbxassetid://92189642379919",
-						}),
-					},
+					Text = "Run the 3ds Max companion plugin first, then connect from Max Sync.",
+					TextWrapped = true,
 				}),
-				Label{
-					LayoutOrder = 2,
-					Text = "Install and run the 3ds Max companion plugin from this repository before using Max Sync."
-				},
-				TextInput{
-					LayoutOrder = 3,
-					Text = "https://github.com/madexperience/max-animation-plugin",
-				},
-				TextInput{
-					LayoutOrder = 4,
-					Text = "https://github.com/madexperience/max-animation-plugin/blob/main/studio-plugin/README.md",
-				},
-
-
-				Label{
-					LayoutOrder = 5,
-					Text = "This GPL-3.0-or-later Max port is free and open source. Support links below are preserved from the upstream project."
-				},
-				VerticalCollapsibleSection {
-					Collapsed = true,
-					Text = "Support Development",
-					LayoutOrder = 6,
-					OnCollapsedChanged = function(isExpanded: boolean)
-						if isExpanded then
-							-- Load the thank you text when section is expanded
-							local text = getThankYouText()
-							thankYouText:set(text)
-						end
-					end,
-					[Children] = {
-						TextInput{
-							LayoutOrder = 1,
-							Text = "https://ko-fi.com/cautioned",
-						},
-						TextInput{
-							LayoutOrder = 2,
-							Text = "https://www.roblox.com/games/12361360692/#!/store",
-						},
-						Label{
-							LayoutOrder = 3,
-							Text = thankYouText,
-							RichText = true
-						},
-						Label{
-							LayoutOrder = 4,
-							Text = "Like the plugin? Leave a review on the Roblox Store!"
-						},
-						Label{
-							LayoutOrder = 5,
-							Text = "⚠",
-							RichText = true
-						},
-
-						Label{
-							LayoutOrder = 6,
-							Text = "Upstream by Cautioned @CAUTlONED. Max port maintained by madexperience.",
-							RichText = true
-						},
-					}
-				} :: any,
 			},
 		}) :: any,
 	}

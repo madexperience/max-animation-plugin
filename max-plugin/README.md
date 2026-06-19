@@ -15,7 +15,8 @@ This package starts a local HTTP server on `127.0.0.1:31337` so the Roblox Studi
 
 3. Open 3ds Max.
 4. Drag `start_max_animations.ms` into the 3ds Max viewport.
-5. In Roblox Studio, open `Max Animations` and connect to port `31337`.
+5. Keep the `Max Animations` window open.
+6. In Roblox Studio, open `Max Animations` and connect to port `31337`.
 
 Optional persistent install:
 
@@ -31,6 +32,7 @@ The server, localhost protocol, and first-pass transform animation bridge are pa
 Supported now:
 
 - starts the localhost bridge
+- shows a small 3ds Max launcher/status window
 - responds to `/health`
 - responds to `/list_armatures` with rig names, bone counts, and frame range
 - exports sampled Max transform animation as Studio-compatible JSON
@@ -42,12 +44,11 @@ Still WIP:
 - polished Biped/CAT/custom rig validation
 - axis/unit calibration presets for production rigs
 - curve tangent/easing preservation beyond linear keyframes
-- polished toolbar/menu UI inside 3ds Max
 
 ## Export From Max To Studio
 
 1. In 3ds Max, make sure the animated rig node names match the Roblox rig part or bone names.
-2. Start the companion server with `start_max_animations.ms`.
+2. Start the companion server with `start_max_animations.ms` and keep the `Max Animations` window open.
 3. In Roblox Studio, select the target rig.
 4. Open `Max Animations`.
 5. Connect to port `31337`.
