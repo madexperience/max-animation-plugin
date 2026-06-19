@@ -61,11 +61,12 @@ Use this when Studio HTTP/local network access is disabled or unreliable.
 3. Select the rig root in Max if the scene has multiple rigs. If nothing is selected, the baker prefers a rig named `Root`.
 4. Leave `Full Range Bake` on. The baker uses the active 3ds Max animation range.
 5. If the imported motion scale is wrong, adjust `Manual Unit Scale` and bake again.
-6. Click `Bake Animation to Clipboard`.
-7. In Roblox Studio, select the target rig.
-8. Open `Max Animations`.
-9. In `Legacy Import`, click `Import Animation from Clipboard`.
-10. Paste the copied text into the opened Studio script.
+6. Optional: click `Inspect Animation Data` and check the 3ds Max Listener. If every bone has only one or two unique poses, the animation is probably not keyed on the exported rig nodes.
+7. Click `Bake Animation to Clipboard`.
+8. In Roblox Studio, select the target rig.
+9. Open `Max Animations`.
+10. In `Legacy Import`, click `Import Animation from Clipboard`.
+11. Paste the copied text into the opened Studio script.
 
 ### Option B: File bake
 
@@ -104,6 +105,17 @@ If it reports `1 keyframes` or `0.000s`, check the 3ds Max animation range and m
 If Roblox shows the imported clip as 60 frames for a 1 second animation, that is only Studio's 60 FPS timeline display. A 30 FPS Max range from frame 0 to 30 should still import as 1 second. If playback ends immediately, check the 3ds Max Listener for a warning that only a few unique poses were sampled.
 
 If position scale is wrong, change `Manual Unit Scale` in the Max launcher before baking or restarting the local server. The default is `1`.
+
+## Inspecting Max Animation Data
+
+Click `Inspect Animation Data` in the Max launcher. The 3ds Max Listener prints:
+
+- the selected rig name
+- sampled duration, keyframe count, and frame range
+- unique sampled poses for each exported bone
+- best-effort transform/position/rotation/scale controller key counts
+
+If `Keyframes sampled` is correct but every bone reports only one or two unique poses, the timeline range is not the main issue. The motion may be stored on another helper/control rig, a constraint controller, a layer controller, or a different root than the exported deform bones.
 
 ## Blender Feature Parity Notes
 

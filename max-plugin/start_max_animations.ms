@@ -10,9 +10,11 @@
     global MaxAnimations_Rollout
     global MaxAnimations_pythonEntry
     global MaxAnimations_bakeEntry
+    global MaxAnimations_inspectEntry
     global MaxAnimations_startServer
     global MaxAnimations_bakeClipboard
     global MaxAnimations_bakeFile
+    global MaxAnimations_inspectAnimation
     global MaxAnimations_applySettings
 
     local Path = dotNetClass "System.IO.Path"
@@ -21,6 +23,7 @@
     local scriptDir = getFilenamePath scriptFile
     MaxAnimations_pythonEntry = Path.Combine scriptDir "start_max_server.py"
     MaxAnimations_bakeEntry = Path.Combine scriptDir "bake_to_clipboard.py"
+    MaxAnimations_inspectEntry = Path.Combine scriptDir "inspect_animation.py"
 
     fn MaxAnimations_applySettings unitScale =
     (
@@ -92,9 +95,32 @@
         )
     )
 
+    fn MaxAnimations_inspectAnimation unitScale =
+    (
+        if doesFileExist MaxAnimations_inspectEntry then
+        (
+            try
+            (
+                MaxAnimations_applySettings unitScale
+                python.ExecuteFile MaxAnimations_inspectEntry
+                true
+            )
+            catch
+            (
+                messageBox ("Inspect animation failed:\n" + getCurrentException()) title:"Max Animations"
+                false
+            )
+        )
+        else
+        (
+            messageBox ("Could not find inspect_animation.py next to:\n" + MaxAnimations_inspectEntry) title:"Max Animations"
+            false
+        )
+    )
+
     try (destroyDialog MaxAnimations_Rollout) catch ()
 
-    rollout MaxAnimations_Rollout "Max Animations" width:460 height:370
+    rollout MaxAnimations_Rollout "Max Animations" width:460 height:405
     (
         label titleLabel "Roblox Max Animations" align:#center
         label statusLabel "Status: idle" align:#left
@@ -106,6 +132,7 @@
         label spacer2 "" height:6
         checkbox fullRangeCheckbox "Full Range Bake" checked:true enabled:false align:#left
         spinner unitScaleSpinner "Manual Unit Scale: " range:[0.0001,1000,1] type:#float scale:0.1 fieldwidth:80 align:#left
+        button inspectButton "Inspect Animation Data" width:410 height:28 align:#center
         button bakeButton "Bake Animation to Clipboard" width:410 height:28 align:#center
         button bakeFileButton "Bake to File (.rbxanim)" width:410 height:28 align:#center
         label clipboardStatusLabel "Clipboard: idle" align:#left
@@ -154,6 +181,18 @@
         on unitScaleSpinner changed value do
         (
             MaxAnimations_applySettings value
+        )
+
+        on inspectButton pressed do
+        (
+            if MaxAnimations_inspectAnimation unitScaleSpinner.value then
+            (
+                clipboardStatusLabel.text = "Inspect: see Max Listener"
+            )
+            else
+            (
+                clipboardStatusLabel.text = "Inspect: failed"
+            )
         )
 
         on bakeFileButton pressed do
