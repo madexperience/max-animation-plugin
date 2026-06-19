@@ -6,6 +6,7 @@
 - Respond to `/list_armatures`.
 - Update Studio plugin labels from Blender to Max.
 - Verify Studio can connect to Max.
+- Package animator-friendly `.rbxm` and Max companion `.zip` artifacts.
 
 ## Phase 2: Rig Export
 
@@ -15,14 +16,16 @@
 
 ## Phase 3: Animation Import to Studio
 
-- Read Max keyframes from a selected rig.
-- Convert transforms to Roblox pose data.
-- Create or update a Roblox `KeyframeSequence`.
+- Read sampled Max transforms from a selected rig. (MVP complete)
+- Convert transforms to Roblox pose data. (MVP complete)
+- Create or update a Roblox `KeyframeSequence`. (MVP complete via Studio importer)
+- Validate axis and unit presets on real Biped/CAT/custom rigs.
 
 ## Phase 4: Animation Export to Max
 
-- Serialize Roblox `KeyframeSequence` data.
-- Apply animation keys to the corresponding Max rig.
+- Serialize Roblox `KeyframeSequence` data. (MVP already handled by Studio plugin)
+- Apply animation keys to the corresponding Max rig. (MVP complete)
+- Improve key tangent/easing preservation.
 
 ## Phase 5: Feature Parity
 

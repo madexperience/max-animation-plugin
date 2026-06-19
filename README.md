@@ -67,7 +67,18 @@
    exec(open(r"C:\path\to\max-animation-plugin\max-plugin\start_max_server.py", encoding="utf-8").read())
    ```
 
-현재 서버는 연결/프로토콜 검증용입니다. 실제 rig export/import와 animation 변환은 이후 단계에서 구현합니다.
+현재 서버는 1차 transform animation bridge를 포함합니다. Max animation range를 프레임 단위로 샘플링해서 Studio 플러그인이 읽을 수 있는 JSON payload로 내보내고, Studio에서 보낸 animation payload를 이름이 일치하는 Max node에 다시 적용합니다.
+
+Max에서 Studio로 임시 애니메이션을 가져오는 수순:
+
+1. Max rig node 이름을 Roblox rig part 또는 Bone 이름과 맞춥니다.
+2. Max timeline의 animation range를 export할 범위로 맞춥니다.
+3. `start_max_animations.ms`로 서버를 시작합니다.
+4. Roblox Studio에서 대상 rig를 선택합니다.
+5. `Max Animations` 플러그인에서 port `31337`로 Connect합니다.
+6. Max armature를 선택하고 `Import Animation from Max`를 누릅니다.
+
+위치 스케일이 맞지 않으면 3ds Max 실행 전에 `RBX_MAX_UNIT_SCALE` 환경 변수를 설정할 수 있습니다. 기본값은 `1`입니다.
 
 ## Roblox Studio 플러그인 설치
 

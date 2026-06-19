@@ -19,7 +19,15 @@ Response:
 ```json
 {
   "success": true,
-  "armatures": ["RigName"]
+  "armatures": [
+    {
+      "name": "RigName",
+      "num_bones": 15,
+      "has_animation": true,
+      "frame_range": [0, 60],
+      "fps": 30
+    }
+  ]
 }
 ```
 
@@ -40,6 +48,8 @@ Temporary response shape:
 ### `GET /export_animation/{armature}`
 
 Exports the active animation from Max to Studio. The existing Blender addon returns an octet-stream payload that Studio decodes into Roblox animation data.
+
+The Max bridge currently returns uncompressed JSON bytes with content type `application/octet-stream`. The Studio deserializer accepts this through its binary JSON fallback.
 
 Response content type:
 
