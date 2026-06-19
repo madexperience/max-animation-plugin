@@ -293,6 +293,7 @@ class MaxSceneAdapter:
                         "easingStyle": "Linear",
                         "easingDirection": "In",
                     }
+                    pose_table[name + "_deform"] = True
 
             keyframes.append(
                 {
@@ -305,8 +306,8 @@ class MaxSceneAdapter:
         payload = {
             "t": max(0.0, (frame_end - frame_start) / fps),
             "kfs": keyframes,
-            "is_deform_rig": False,
-            "is_deform_bone_rig": False,
+            "is_deform_rig": True,
+            "is_deform_bone_rig": True,
             "bone_hierarchy": parent_names,
             "export_info": {
                 "source": "3dsmax",

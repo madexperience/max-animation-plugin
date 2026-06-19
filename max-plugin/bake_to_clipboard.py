@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import ctypes
+import json
 from pathlib import Path
 import sys
 from typing import Any
@@ -136,11 +137,17 @@ def main() -> None:
     adapter = MaxSceneAdapter()
     armature_name = _selected_or_single_armature_name(adapter)
     payload = adapter.export_animation(armature_name)
+    payload_info = json.loads(payload.decode("utf-8"))
+    duration = float(payload_info.get("t") or 0.0)
+    keyframe_count = len(payload_info.get("kfs") or [])
     clipboard_text = _encode_clipboard_payload(payload)
     _copy_text_to_windows_clipboard(clipboard_text)
+    if duration <= 0:
+        print("Warning: baked animation duration is 0. Check the Max animation range.")
     print(
         "Baked Roblox animation to clipboard "
-        f"from '{armature_name}' ({len(clipboard_text)} base64 chars)."
+        f"from '{armature_name}' ({keyframe_count} keyframes, {duration:.3f}s, "
+        f"{len(clipboard_text)} base64 chars)."
     )
 
 
