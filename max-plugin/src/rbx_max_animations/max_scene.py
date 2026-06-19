@@ -222,6 +222,12 @@ def _frame_to_time(frame: float) -> Any:
         return frame
 
 
+def _frame_literal(frame: float) -> str:
+    if abs(frame - round(frame)) < 1e-6:
+        return f"{int(round(frame))}f"
+    return f"{frame:.6f}f"
+
+
 def _time_to_frame(time_value: Any) -> float:
     if rt is None:
         return float(time_value)
@@ -263,22 +269,15 @@ def _time_context(frame: float):
 
     time_value = _frame_to_time(frame)
     try:
-        time_context = pymxs.attime(time_value) if pymxs is not None else None
-    except Exception:
-        time_context = None
-
-    if time_context is not None:
-        with time_context:
-            yield
-        return
-
-    try:
         previous_time = rt.sliderTime
     except Exception:
         previous_time = None
 
     try:
-        rt.sliderTime = time_value
+        try:
+            rt.sliderTime = rt.execute(_frame_literal(frame))
+        except Exception:
+            rt.sliderTime = time_value
         yield
     finally:
         if previous_time is not None:
@@ -295,6 +294,34 @@ def _animate_context(enabled: bool):
         return pymxs.animate(enabled)
     except Exception:
         return nullcontext()
+
+
+def _node_handle(node: Any) -> int | None:
+    if rt is not None:
+        try:
+            return int(rt.getHandleByAnim(node))
+        except Exception:
+            pass
+    try:
+        return int(node.handle)
+    except Exception:
+        return None
+
+
+def _node_world_transform_at_frame(node: Any, frame: float | None = None) -> Any:
+    if frame is None or rt is None:
+        return node.transform
+
+    handle = _node_handle(node)
+    if handle is not None:
+        expression = f"(at time {_frame_literal(frame)} ((maxOps.getNodeByHandle {handle}).transform))"
+        try:
+            return rt.execute(expression)
+        except Exception:
+            pass
+
+    with _time_context(frame):
+        return node.transform
 
 
 @dataclass
@@ -390,24 +417,23 @@ class MaxSceneAdapter:
         frame = frame_start
         while frame <= frame_end + 1e-6:
             pose_table: dict[str, Any] = {}
-            with _time_context(frame):
-                current_locals = self._capture_local_matrices(nodes)
-                for node in nodes:
-                    name = _as_name(node)
-                    current_local = current_locals.get(name)
-                    rest_local = rest_locals.get(name)
-                    if current_local is None or rest_local is None:
-                        continue
+            current_locals = self._capture_local_matrices(nodes, frame)
+            for node in nodes:
+                name = _as_name(node)
+                current_local = current_locals.get(name)
+                rest_local = rest_locals.get(name)
+                if current_local is None or rest_local is None:
+                    continue
 
-                    # Roblox Bone.Transform is the delta applied after the
-                    # rest CFrame, so currentLocal = restLocal * delta.
-                    delta = _matrix_inverse(rest_local) * current_local
-                    pose_table[name] = {
-                        "components": _matrix_to_components(delta, unit_scale),
-                        "easingStyle": "Linear",
-                        "easingDirection": "In",
-                    }
-                    pose_table[name + "_deform"] = True
+                # Roblox Bone.Transform is the delta applied after the
+                # rest CFrame, so currentLocal = restLocal * delta.
+                delta = _matrix_inverse(rest_local) * current_local
+                pose_table[name] = {
+                    "components": _matrix_to_components(delta, unit_scale),
+                    "easingStyle": "Linear",
+                    "easingDirection": "In",
+                }
+                pose_table[name + "_deform"] = True
 
             keyframes.append(
                 {
@@ -553,22 +579,21 @@ class MaxSceneAdapter:
         return result
 
     def _capture_local_matrices(self, nodes: list[Any], frame: float | None = None) -> dict[str, Any]:
-        context = _time_context(frame) if frame is not None else nullcontext()
         node_set = set(nodes)
         matrices: dict[str, Any] = {}
 
-        with context:
-            for node in nodes:
-                try:
-                    parent_node = _parent(node)
-                    world_matrix = node.transform
-                    if parent_node in node_set:
-                        local_matrix = world_matrix * _matrix_inverse(parent_node.transform)
-                    else:
-                        local_matrix = world_matrix
-                    matrices[_as_name(node)] = local_matrix
-                except Exception:
-                    continue
+        for node in nodes:
+            try:
+                parent_node = _parent(node)
+                world_matrix = _node_world_transform_at_frame(node, frame)
+                if parent_node in node_set:
+                    parent_world_matrix = _node_world_transform_at_frame(parent_node, frame)
+                    local_matrix = world_matrix * _matrix_inverse(parent_world_matrix)
+                else:
+                    local_matrix = world_matrix
+                matrices[_as_name(node)] = local_matrix
+            except Exception:
+                continue
 
         return matrices
 

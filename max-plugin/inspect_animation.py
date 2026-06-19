@@ -18,7 +18,7 @@ for module_name in list(sys.modules):
     if module_name == "rbx_max_animations" or module_name.startswith("rbx_max_animations."):
         del sys.modules[module_name]
 
-from rbx_max_animations.max_scene import MaxSceneAdapter, rt  # noqa: E402
+from rbx_max_animations.max_scene import MaxSceneAdapter, _node_handle, rt  # noqa: E402
 
 
 def _selected_or_single_armature_name(adapter: MaxSceneAdapter) -> str:
@@ -146,6 +146,10 @@ def _matrix_signature(matrix: Any) -> tuple[float, ...]:
 
 
 def _controller_parts(node: Any) -> list[str]:
+    parts = _controller_parts_from_maxscript(node)
+    if parts:
+        return parts
+
     parts: list[str] = []
     for prop_name in ("transform", "position", "rotation", "scale"):
         controller = _controller_for(node, prop_name)
@@ -153,6 +157,65 @@ def _controller_parts(node: Any) -> list[str]:
         if controller is not None or key_count:
             parts.append(f"{prop_name}={_controller_name(controller)} keys={key_count if key_count is not None else '?'}")
     return parts
+
+
+def _controller_parts_from_maxscript(node: Any) -> list[str]:
+    if rt is None:
+        return []
+
+    handle = _node_handle(node)
+    if handle is None:
+        return []
+
+    expression = f"""
+    (
+        local n = maxOps.getNodeByHandle {handle}
+        local parts = #()
+        fn countControllerKeys ctrl =
+        (
+            local total = 0
+            if ctrl != undefined do
+            (
+                try (total += numKeys ctrl) catch ()
+                local subCount = 0
+                try (subCount = numSubs ctrl) catch ()
+                for index = 1 to subCount do
+                (
+                    local subAnim = undefined
+                    try (subAnim = getSubAnim ctrl index) catch ()
+                    if subAnim != undefined do
+                    (
+                        local subController = undefined
+                        try (subController = subAnim.controller) catch ()
+                        if subController != undefined do total += countControllerKeys subController
+                    )
+                )
+            )
+            total
+        )
+        fn appendController label ctrl =
+        (
+            if ctrl != undefined do
+            (
+                local keyCount = countControllerKeys ctrl
+                if keyCount > 0 do append parts (label + "=" + ((classOf ctrl) as string) + " keys=" + (keyCount as string))
+            )
+        )
+        if n != undefined do
+        (
+            appendController "transform" n.controller
+            appendController "position" n.position.controller
+            appendController "rotation" n.rotation.controller
+            appendController "scale" n.scale.controller
+        )
+        parts
+    )
+    """
+
+    try:
+        return [str(part) for part in list(rt.execute(expression))]
+    except Exception:
+        return []
 
 
 def _print_controller_summary(adapter: MaxSceneAdapter, armature_name: str) -> None:
