@@ -41,6 +41,7 @@
     (
         Environment.SetEnvironmentVariable "RBX_MAX_UNIT_SCALE" (unitScale as string)
         Environment.SetEnvironmentVariable "RBX_MAX_REST_FRAME" restFrameMode
+        python.Execute ("import os; os.environ['RBX_MAX_UNIT_SCALE'] = '" + (unitScale as string) + "'; os.environ['RBX_MAX_REST_FRAME'] = '" + restFrameMode + "'")
     )
 
     fn MaxAnimations_startServer unitScale restFrameMode =
