@@ -17,6 +17,12 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+# 3ds Max keeps one Python interpreter alive for the session. Reload our
+# package so replacing the plugin files does not keep using an older exporter.
+for module_name in list(sys.modules):
+    if module_name == "rbx_max_animations" or module_name.startswith("rbx_max_animations."):
+        del sys.modules[module_name]
+
 from rbx_max_animations.max_scene import MaxSceneAdapter, rt  # noqa: E402
 
 
@@ -140,13 +146,19 @@ def main() -> None:
     payload_info = json.loads(payload.decode("utf-8"))
     duration = float(payload_info.get("t") or 0.0)
     keyframe_count = len(payload_info.get("kfs") or [])
+    export_info = payload_info.get("export_info") if isinstance(payload_info.get("export_info"), dict) else {}
+    frame_range = export_info.get("frame_range") if isinstance(export_info, dict) else None
+    frame_range_text = ""
+    if isinstance(frame_range, list) and len(frame_range) >= 2:
+        frame_range_text = f", frames {float(frame_range[0]):.3f}-{float(frame_range[1]):.3f}"
     clipboard_text = _encode_clipboard_payload(payload)
     _copy_text_to_windows_clipboard(clipboard_text)
     if duration <= 0:
         print("Warning: baked animation duration is 0. Check the Max animation range.")
     print(
         "Baked Roblox animation to clipboard "
-        f"from '{armature_name}' ({keyframe_count} keyframes, {duration:.3f}s, "
+        f"from '{armature_name}' ({keyframe_count} keyframes, {duration:.3f}s"
+        f"{frame_range_text}, "
         f"{len(clipboard_text)} base64 chars)."
     )
 

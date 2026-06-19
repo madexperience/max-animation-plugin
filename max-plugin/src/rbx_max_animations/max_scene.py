@@ -513,11 +513,25 @@ class MaxSceneAdapter:
 
         fps = self._fps()
         try:
-            start = _time_to_frame(rt.animationRange.start)
-            end = _time_to_frame(rt.animationRange.end)
+            start = float(rt.animationRange.start)
+            end = float(rt.animationRange.end)
+            try:
+                ticks_per_frame = float(rt.ticksPerFrame)
+                raw_span = abs(end - start)
+                tick_span = raw_span / ticks_per_frame if ticks_per_frame > 0 else 0
+                if raw_span >= ticks_per_frame and abs(tick_span - round(tick_span)) < 1e-6:
+                    start /= ticks_per_frame
+                    end /= ticks_per_frame
+            except Exception:
+                pass
             return start, end, fps
         except Exception:
-            return 0.0, 0.0, fps
+            try:
+                start = _time_to_frame(rt.animationRange.start)
+                end = _time_to_frame(rt.animationRange.end)
+                return start, end, fps
+            except Exception:
+                return 0.0, 0.0, fps
 
     def _fps(self) -> float:
         if rt is None:
