@@ -182,6 +182,10 @@ def main() -> None:
     frame_range_text = ""
     if isinstance(frame_range, list) and len(frame_range) >= 2:
         frame_range_text = f", frames {float(frame_range[0]):.3f}-{float(frame_range[1]):.3f}"
+    rest_frame = export_info.get("rest_frame") if isinstance(export_info, dict) else None
+    rest_frame_text = ""
+    if rest_frame is not None:
+        rest_frame_text = f", rest frame {float(rest_frame):.3f}"
 
     output_path = os.environ.get("RBX_MAX_BAKE_OUTPUT", "").strip()
     if output_path:
@@ -211,7 +215,7 @@ def main() -> None:
     print(
         f"Baked Roblox animation to {destination} "
         f"from '{armature_name}' ({keyframe_count} keyframes, {duration:.3f}s"
-        f"{frame_range_text}, {size_text})."
+        f"{frame_range_text}{rest_frame_text}, {size_text})."
     )
 
 

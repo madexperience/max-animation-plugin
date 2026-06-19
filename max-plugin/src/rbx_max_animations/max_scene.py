@@ -24,6 +24,7 @@ except Exception:  # pragma: no cover - pymxs only exists inside 3ds Max.
 
 DEFAULT_FPS = 30.0
 DEFAULT_SAMPLE_STEP = 1.0
+DEFAULT_REST_FRAME = "end"
 VECTOR_EPSILON = 1e-8
 
 
@@ -382,6 +383,28 @@ def _node_world_transform_at_frame(node: Any, frame: float | None = None) -> Any
         return node.transform
 
 
+def _rest_frame_from_env(frame_start: float, frame_end: float) -> tuple[float, str]:
+    raw = os.environ.get("RBX_MAX_REST_FRAME", DEFAULT_REST_FRAME).strip()
+    mode = raw.casefold()
+
+    if mode in ("start", "frame_start", "animation_start"):
+        return frame_start, "start"
+    if mode in ("end", "frame_end", "animation_end"):
+        return frame_end, "end"
+    if mode in ("current", "slider", "slider_time"):
+        if rt is not None:
+            try:
+                return _time_to_frame(rt.sliderTime), "current"
+            except Exception:
+                pass
+        return frame_start, "current_fallback_start"
+
+    try:
+        return float(raw), "custom"
+    except ValueError:
+        return frame_end, "end"
+
+
 @dataclass
 class MaxSceneAdapter:
     """Scene operations required by the Studio protocol."""
@@ -467,7 +490,8 @@ class MaxSceneAdapter:
         if frame_end < frame_start:
             frame_start, frame_end = frame_end, frame_start
 
-        rest_locals = self._capture_local_matrices(nodes, frame_start)
+        rest_frame, rest_frame_source = _rest_frame_from_env(frame_start, frame_end)
+        rest_locals = self._capture_local_matrices(nodes, rest_frame)
         parent_names = self._parent_names(nodes)
         unit_scale = self._unit_scale()
 
@@ -512,6 +536,8 @@ class MaxSceneAdapter:
                 "time_unit": "seconds",
                 "fps": fps,
                 "frame_range": [frame_start, frame_end],
+                "rest_frame": rest_frame,
+                "rest_frame_source": rest_frame_source,
                 "sample_step": self.sample_step,
                 "format": "max-animation-plugin-json-v1",
                 "delta_order": "inverse_rest_times_current",

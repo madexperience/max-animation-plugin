@@ -309,12 +309,16 @@ def main() -> None:
     export_info = data.get("export_info") if isinstance(data.get("export_info"), dict) else {}
     frame_range = export_info.get("frame_range")
     fps = export_info.get("fps")
+    rest_frame = export_info.get("rest_frame")
+    rest_frame_source = export_info.get("rest_frame_source")
 
     print("=== Max Animation Inspect ===")
     print(f"Rig: {armature_name}")
     print(f"Duration: {float(data.get('t') or 0.0):.3f}s")
     print(f"Keyframes sampled: {len(keyframes)}")
     print(f"Frame range: {frame_range} @ {fps} fps")
+    if rest_frame is not None:
+        print(f"Rest pose frame: {rest_frame} ({rest_frame_source or 'unknown'})")
 
     if not keyframes:
         print("No sampled keyframes.")
