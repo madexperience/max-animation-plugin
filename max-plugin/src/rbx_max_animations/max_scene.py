@@ -317,10 +317,9 @@ class MaxSceneAdapter:
                     if current_local is None or rest_local is None:
                         continue
 
-                    # Max Matrix3 uses row-vector convention. The local delta
-                    # below mirrors the usual MaxScript expression:
-                    # currentLocal * inverse(restLocal)
-                    delta = current_local * _matrix_inverse(rest_local)
+                    # Roblox Bone.Transform is the delta applied after the
+                    # rest CFrame, so currentLocal = restLocal * delta.
+                    delta = _matrix_inverse(rest_local) * current_local
                     pose_table[name] = {
                         "components": _matrix_to_components(delta, unit_scale),
                         "easingStyle": "Linear",
@@ -349,6 +348,7 @@ class MaxSceneAdapter:
                 "frame_range": [frame_start, frame_end],
                 "sample_step": self.sample_step,
                 "format": "max-animation-plugin-json-v1",
+                "delta_order": "inverse_rest_times_current",
                 "target_bone_rest_received": target_bone_rest is not None,
             },
         }
