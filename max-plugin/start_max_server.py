@@ -1,5 +1,6 @@
 """Development entry point for running the Max animation server inside 3ds Max."""
 
+import builtins
 from pathlib import Path
 import sys
 
@@ -13,5 +14,12 @@ if str(SRC) not in sys.path:
 from rbx_max_animations.server import start_server  # noqa: E402
 
 
-server = start_server()
-print(f"Roblox Max Animations server listening on {server.server_address[0]}:{server.server_address[1]}")
+SERVER_KEY = "_rbx_max_animations_server"
+server = getattr(builtins, SERVER_KEY, None)
+
+if server is None:
+    server = start_server()
+    setattr(builtins, SERVER_KEY, server)
+    print(f"Roblox Max Animations server listening on {server.server_address[0]}:{server.server_address[1]}")
+else:
+    print(f"Roblox Max Animations server already running on {server.server_address[0]}:{server.server_address[1]}")

@@ -13,6 +13,7 @@ venv/
 dist/
 build/
 *.zip
+!releases/MaxAnimationsMaxPlugin.zip
 
 # Local analysis checkout, not part of the Max port repository.
 upstream-blender-plugin/

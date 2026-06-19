@@ -28,6 +28,8 @@
 ```text
 .
 ├── max-plugin/
+│   ├── install_max_plugin.ms
+│   ├── start_max_animations.ms
 │   ├── start_max_server.py
 │   └── src/rbx_max_animations/
 │       ├── __init__.py
@@ -47,26 +49,23 @@
 └── README.md
 ```
 
-## 3ds Max 플러그인 실행
+## 3ds Max 플러그인 설치
 
-현재는 개발용 Python 서버 골격입니다. 3ds Max 안에서 실행하는 것을 기준으로 합니다.
+애니메이터는 레포를 클론하지 않고 [releases/MaxAnimationsMaxPlugin.zip](releases/MaxAnimationsMaxPlugin.zip)만 받으면 됩니다.
 
-1. 이 저장소를 클론합니다.
+1. `MaxAnimationsMaxPlugin.zip`을 다운로드합니다.
+2. 원하는 폴더에 압축을 풉니다.
+3. 3ds Max를 실행합니다.
+4. 압축을 푼 폴더의 `start_max_animations.ms`를 3ds Max viewport에 드래그합니다.
+5. 콘솔에 서버 시작 메시지가 표시되면 `127.0.0.1:31337`에서 Studio 플러그인의 요청을 받을 준비가 된 상태입니다.
 
-   ```powershell
-   git clone https://github.com/madexperience/max-animation-plugin.git
-   cd max-animation-plugin
-   ```
+반복 사용을 더 편하게 하려면 `install_max_plugin.ms`를 3ds Max viewport에 드래그하세요. 이 스크립트는 Max companion plugin을 사용자 Scripts 폴더에 복사하고 `Roblox Max Animations` MacroScript 액션을 등록합니다.
 
-2. 3ds Max를 실행합니다.
-
-3. 3ds Max의 Python Listener 또는 Script Editor에서 아래 파일을 실행합니다.
+개발 중 직접 실행하려면 3ds Max의 Python Listener 또는 Script Editor에서 아래 파일을 실행할 수 있습니다.
 
    ```python
    exec(open(r"C:\path\to\max-animation-plugin\max-plugin\start_max_server.py", encoding="utf-8").read())
    ```
-
-4. 콘솔에 서버 시작 메시지가 표시되면 `127.0.0.1:31337`에서 Studio 플러그인의 요청을 받을 준비가 된 상태입니다.
 
 현재 서버는 연결/프로토콜 검증용입니다. 실제 rig export/import와 animation 변환은 이후 단계에서 구현합니다.
 
