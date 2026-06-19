@@ -164,6 +164,39 @@ def _frame_to_time(frame: float) -> Any:
         return frame
 
 
+def _time_to_frame(time_value: Any) -> float:
+    if rt is None:
+        return float(time_value)
+
+    try:
+        return float(rt.timeToFrame(time_value))
+    except Exception:
+        pass
+
+    try:
+        raw_value = float(time_value)
+    except Exception:
+        return 0.0
+
+    try:
+        zero_time = float(rt.frameToTime(0))
+        one_time = float(rt.frameToTime(1))
+        frame_delta = one_time - zero_time
+        if abs(frame_delta) > 1e-9:
+            return (raw_value - zero_time) / frame_delta
+    except Exception:
+        pass
+
+    try:
+        ticks_per_frame = float(rt.ticksPerFrame)
+        if abs(ticks_per_frame) > 1e-9:
+            return raw_value / ticks_per_frame
+    except Exception:
+        pass
+
+    return raw_value
+
+
 def _time_context(frame: float):
     if pymxs is None:
         return nullcontext()
@@ -480,9 +513,8 @@ class MaxSceneAdapter:
 
         fps = self._fps()
         try:
-            ticks_per_frame = float(rt.ticksPerFrame)
-            start = float(rt.animationRange.start) / ticks_per_frame
-            end = float(rt.animationRange.end) / ticks_per_frame
+            start = _time_to_frame(rt.animationRange.start)
+            end = _time_to_frame(rt.animationRange.end)
             return start, end, fps
         except Exception:
             return 0.0, 0.0, fps
