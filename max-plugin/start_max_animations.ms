@@ -140,14 +140,14 @@
 
     try (destroyDialog MaxAnimations_Rollout) catch ()
 
-    rollout MaxAnimations_Rollout "Max Animations" width:460 height:460
+    rollout MaxAnimations_Rollout "Max Animations" width:460 height:500
     (
         label titleLabel "Roblox Max Animations" align:#center
         label statusLabel "Status: idle" align:#left
         label portLabel "Port: 127.0.0.1:31337" align:#left
         button startButton "Start / Restart Local Server" width:410 height:28 align:#center
         label spacer1 "" height:6
-        label directLabel "Direct import: Studio -> Connect -> Import Animation from Max." align:#left
+        label directLabel "Direct import: Studio -> Connect -> Import from Max." align:#left
         label directNote "Requires Studio local HTTP permission." align:#left
         label spacer2 "" height:6
         checkbox fullRangeCheckbox "Full Range Bake" checked:true enabled:false align:#left
@@ -159,11 +159,11 @@
         button bakeButton "Bake Animation to Clipboard" width:410 height:28 align:#center
         button bakeFileButton "Bake to File (.rbxanim)" width:410 height:28 align:#center
         label clipboardStatusLabel "Clipboard: idle" align:#left
-        label clipLabel1 "Clipboard import: bake here, then Studio Legacy Import -> Clipboard." align:#left
-        label clipLabel2 "File import: Studio Legacy Import -> Import Animation from File(s)." align:#left
-        label clipLabel3 "Clipboard import: paste the copied text into the opened Studio script." align:#left
+        label clipLabel1 "Clipboard: Studio -> Legacy Import -> Clipboard." align:#left
+        label clipLabel2 "File: Studio -> Legacy Import -> File(s)." align:#left
+        label clipLabel3 "Paste copied clipboard text into the Studio script." align:#left
         label spacer3 "" height:6
-        label noteLabel "Select the rig root in Max when multiple rigs are in the scene." align:#left
+        label noteLabel "Select the rig root if the scene has multiple rigs." align:#left
 
         on MaxAnimations_Rollout open do
         (

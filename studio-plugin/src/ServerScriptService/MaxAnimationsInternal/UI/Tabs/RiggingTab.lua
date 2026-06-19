@@ -29,7 +29,7 @@ local localeLang = studioLocale:sub(1, 2):lower()
 
 local UPDATE_WARNING: { [string]: string } = {
 	en = "Skinned and deform rig export requires matching support in the Max companion plugin before the full pipeline is complete.",
-	ko = "스키닝 및 디폼 리그의 전체 내보내기 파이프라인은 Max companion plugin 지원이 구현된 뒤 사용할 수 있습니다.",
+	ko = "Skinned and deform rig export requires matching support in the Max companion plugin before the full pipeline is complete.",
 }
 
 local SharedComponents = require(script.Parent.Parent.SharedComponents)

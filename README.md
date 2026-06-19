@@ -1,138 +1,48 @@
 # Roblox Max Animations Plugin
 
-3ds Max와 Roblox Studio 사이에서 rig와 animation을 주고받기 위한 오픈소스 플러그인 프로젝트입니다. 목표는 Cautioned의 Blender Animations Plugin 흐름을 유지하되, Blender 애드온 대신 3ds Max용 플러그인을 붙이는 것입니다.
+## License
 
-이 프로젝트는 무료 공개 소프트웨어이며 GPL-3.0-or-later로 배포됩니다.
+This project is free and open source under `GPL-3.0-or-later`.
 
-## 현재 상태
+It is a 3ds Max companion workflow inspired by the open-source `Cautioned/Blender-Animations-Plugin` project. See [NOTICE.md](NOTICE.md) for attribution and third-party dependency notices.
 
-초기 포팅 작업용 저장소이며, Studio 플러그인 소스는 `studio-plugin/` 아래에 들어와 있습니다.
+## Roblox Studio Plugin Installation
 
-- Studio 플러그인 UI와 기능 흐름은 기존 Blender Animations Plugin을 최대한 유지합니다.
-- 3ds Max 쪽은 기존 localhost HTTP API와 호환되는 서버부터 구현합니다.
-- 첫 목표는 `Roblox Studio Plugin -> localhost:31337 -> 3ds Max Plugin` 연결을 검증하는 것입니다.
-- Studio 플러그인의 Fusion 의존성은 정적으로 vendored 처리되어 애니메이터 설치에 Wally가 필요하지 않습니다.
+Use this when you only need to install the Roblox Studio plugin.
 
-아직 전체 기능이 완성된 릴리스는 아닙니다.
+1. Download [MaxAnimationsPlugin.rbxm](releases/MaxAnimationsPlugin.rbxm).
+2. Copy `MaxAnimationsPlugin.rbxm` into your local Roblox plugins folder:
 
-## 목표 기능
-
-- Roblox Studio에서 선택한 rig를 3ds Max로 내보내기
-- 3ds Max에서 만든 animation을 Roblox `KeyframeSequence`로 가져오기
-- Roblox animation을 3ds Max rig에 다시 적용하기
-- 기존 Studio 플러그인의 Player, Rigging, Tools, More 탭 흐름 유지
-- Live Sync, weapon/accessory export, marker/event, animation simplifier는 단계적으로 포팅
-
-## 저장소 구조
-
-```text
-.
-├── max-plugin/
-│   ├── install_max_plugin.ms
-│   ├── start_max_animations.ms
-│   ├── start_max_server.py
-│   └── src/rbx_max_animations/
-│       ├── __init__.py
-│       ├── max_scene.py
-│       └── server.py
-├── studio-plugin/
-│   ├── default.project.json
-│   ├── wally.toml
-│   ├── README.md
-│   ├── src/ServerScriptService/MaxAnimationsInternal/
-│   └── vendor/Fusion/
-├── docs/
-│   ├── protocol.md
-│   └── roadmap.md
-├── LICENSE
-├── NOTICE.md
-└── README.md
-```
-
-## 3ds Max 플러그인 설치
-
-애니메이터는 레포를 클론하지 않고 [releases/MaxAnimationsMaxPlugin.zip](releases/MaxAnimationsMaxPlugin.zip)만 받으면 됩니다.
-
-1. `MaxAnimationsMaxPlugin.zip`을 다운로드합니다.
-2. 원하는 폴더에 압축을 풉니다.
-3. 3ds Max를 실행합니다.
-4. 압축을 푼 폴더의 `start_max_animations.ms`를 3ds Max viewport에 드래그합니다.
-5. 콘솔에 서버 시작 메시지가 표시되면 `127.0.0.1:31337`에서 Studio 플러그인의 요청을 받을 준비가 된 상태입니다.
-
-반복 사용을 더 편하게 하려면 `install_max_plugin.ms`를 3ds Max viewport에 드래그하세요. 이 스크립트는 Max companion plugin을 사용자 Scripts 폴더에 복사하고 `Roblox Max Animations` MacroScript 액션을 등록합니다.
-
-개발 중 직접 실행하려면 3ds Max의 Python Listener 또는 Script Editor에서 아래 파일을 실행할 수 있습니다.
-
-   ```python
-   exec(open(r"C:\path\to\max-animation-plugin\max-plugin\start_max_server.py", encoding="utf-8").read())
+   ```powershell
+   $plugins = Join-Path $env:LOCALAPPDATA "Roblox\Plugins"
+   New-Item -ItemType Directory -Force $plugins
+   Copy-Item .\releases\MaxAnimationsPlugin.rbxm $plugins\MaxAnimationsPlugin.rbxm -Force
    ```
 
-현재 서버는 1차 transform animation bridge를 포함합니다. Max animation range를 프레임 단위로 샘플링해서 Studio 플러그인이 읽을 수 있는 JSON payload로 내보내고, Studio에서 보낸 animation payload를 이름이 일치하는 Max node에 다시 적용합니다.
+3. Restart Roblox Studio, or reload local plugins.
+4. Open the `Plugins` tab.
+5. Click `Max Animations`.
 
-Max에서 Studio로 임시 애니메이션을 가져오는 수순:
+The Studio plugin includes its Lua dependencies statically, so animators do not need Wally, Rokit, Rojo, or a repository clone to install it.
 
-1. Max rig node 이름을 Roblox rig part 또는 Bone 이름과 맞춥니다.
-2. Max timeline의 animation range를 export할 범위로 맞춥니다.
-3. `start_max_animations.ms`로 서버를 시작합니다.
-4. Roblox Studio에서 대상 rig를 선택합니다.
-5. `Max Animations` 플러그인에서 port `31337`로 Connect합니다.
-6. Max armature를 선택하고 `Import Animation from Max`를 누릅니다.
+## 3ds Max Plugin Installation
 
-위치 스케일이 맞지 않으면 3ds Max 실행 전에 `RBX_MAX_UNIT_SCALE` 환경 변수를 설정할 수 있습니다. 기본값은 `1`입니다.
+Use this when you only need to install the 3ds Max companion plugin.
 
-## Roblox Studio 플러그인 설치
+1. Download [MaxAnimationsMaxPlugin.zip](releases/MaxAnimationsMaxPlugin.zip).
+2. Extract the zip anywhere on your machine.
+3. Start 3ds Max.
+4. Drag `start_max_animations.ms` from the extracted folder into the 3ds Max viewport.
+5. The `Max Animations` window should open and start listening on `127.0.0.1:31337`.
 
-애니메이터는 빌드 도구 없이 [releases/MaxAnimationsPlugin.rbxm](releases/MaxAnimationsPlugin.rbxm) 파일만 설치하면 됩니다.
+For repeated use, drag `install_max_plugin.ms` into the 3ds Max viewport once. It copies the companion files to your user scripts folder and registers a `Roblox Max Animations` MacroScript action.
 
-```powershell
-$plugins = Join-Path $env:LOCALAPPDATA "Roblox\Plugins"
-New-Item -ItemType Directory -Force $plugins
-Copy-Item .\releases\MaxAnimationsPlugin.rbxm $plugins\MaxAnimationsPlugin.rbxm -Force
-```
+Typical animation import flow:
 
-그 다음 Roblox Studio를 재시작하거나 로컬 플러그인을 reload한 뒤, Plugins 탭의 `Max Animations` 버튼을 열면 됩니다.
-
-소스에서 직접 빌드할 때도 Fusion은 `studio-plugin/vendor/Fusion`에 포함되어 있으므로 Wally가 필요하지 않습니다.
-
-```powershell
-rokit install
-cd studio-plugin
-rojo build plugin.project.json -o MaxAnimationsPlugin.rbxm
-```
-
-개발 중에는 `rojo serve default.project.json`로 Studio에 동기화할 수 있습니다. 배포/로컬 설치용 `.rbxm`은 `plugin.project.json`으로 빌드합니다. `wally.toml`은 vendored Fusion을 업데이트할 때 참고용으로만 유지합니다.
-
-자세한 절차는 [studio-plugin/README.md](studio-plugin/README.md)를 참고하세요.
-
-## 통신 API
-
-Studio 플러그인은 localhost HTTP 서버와 통신합니다. 1차 Max 포팅은 기존 Blender 서버 API와 호환되도록 구현합니다.
-
-주요 엔드포인트:
-
-- `GET /list_armatures`
-- `GET /get_bone_rest/{armature}`
-- `GET /export_animation/{armature}`
-- `POST /export_animation/{armature}`
-- `POST /import_animation`
-- `GET /animation_status`
-
-자세한 내용은 [docs/protocol.md](docs/protocol.md)를 참고하세요.
-
-## 개발 원칙
-
-- Studio 플러그인은 가능한 한 작게 수정합니다.
-- 기존 API와 JSON 구조를 먼저 호환시킨 뒤, 내부 이름 정리는 나중에 합니다.
-- 3ds Max 포팅은 작은 기능 단위로 검증합니다.
-- 모바일/PC Studio UI 사용성을 고려해 UI 변경은 scale 중심으로 유지합니다.
-
-## 라이선스와 출처
-
-이 프로젝트는 GPL-3.0-or-later로 공개됩니다.
-
-기반 분석 대상:
-
-- Cautioned/Blender-Animations-Plugin
-- Den_S의 Roblox DevForum Blender rig exporter/animation importer
-
-자세한 출처는 [NOTICE.md](NOTICE.md)를 참고하세요.
+1. Import the same FBX model into Roblox Studio and 3ds Max.
+2. In 3ds Max, select the rig root if the scene has multiple rigs.
+3. Set the 3ds Max animation range.
+4. In the Max companion window, keep `Rest Pose` set to the frame that matches the Roblox imported bind pose.
+5. Click `Bake Animation to Clipboard`.
+6. In Roblox Studio, select the target rig.
+7. In `Max Animations`, use `Legacy Import` -> `Import Animation from Clipboard`.
