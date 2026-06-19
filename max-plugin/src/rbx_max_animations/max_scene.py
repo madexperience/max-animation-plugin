@@ -194,6 +194,38 @@ def _matrix_to_components(matrix: Any, unit_scale: float = 1.0) -> list[float]:
     ]
 
 
+def _deform_delta_to_components(matrix: Any, unit_scale: float = 1.0) -> list[float]:
+    row1 = matrix.row1
+    row2 = matrix.row2
+    row3 = matrix.row3
+    row4 = matrix.row4
+    clean_rows = _orthonormalize_rows(
+        (float(row1.x), float(row1.y), float(row1.z)),
+        (float(row2.x), float(row2.y), float(row2.z)),
+        (float(row3.x), float(row3.y), float(row3.z)),
+    )
+    signs = (-1.0, 1.0, -1.0)
+    swizzled_rows = [
+        [signs[row_index] * clean_rows[row_index][col_index] * signs[col_index] for col_index in range(3)]
+        for row_index in range(3)
+    ]
+
+    return [
+        -float(row4.x) * unit_scale,
+        float(row4.y) * unit_scale,
+        -float(row4.z) * unit_scale,
+        swizzled_rows[0][0],
+        swizzled_rows[0][1],
+        swizzled_rows[0][2],
+        swizzled_rows[1][0],
+        swizzled_rows[1][1],
+        swizzled_rows[1][2],
+        swizzled_rows[2][0],
+        swizzled_rows[2][1],
+        swizzled_rows[2][2],
+    ]
+
+
 def _components_to_matrix(components: list[float], unit_scale: float = 1.0) -> Any:
     if rt is None:
         raise RuntimeError("3ds Max runtime is not available.")
@@ -204,6 +236,32 @@ def _components_to_matrix(components: list[float], unit_scale: float = 1.0) -> A
         rt.point3(components[6], components[7], components[8]),
         rt.point3(components[9], components[10], components[11]),
         rt.point3(components[0] * inv_scale, components[1] * inv_scale, components[2] * inv_scale),
+    )
+
+
+def _components_to_deform_delta_matrix(components: list[float], unit_scale: float = 1.0) -> Any:
+    if rt is None:
+        raise RuntimeError("3ds Max runtime is not available.")
+
+    inv_scale = 1.0 / unit_scale if unit_scale else 1.0
+    signs = (-1.0, 1.0, -1.0)
+    rows = []
+    for row_index in range(3):
+        row = []
+        for col_index in range(3):
+            value = float(components[3 + row_index * 3 + col_index])
+            row.append(signs[row_index] * value * signs[col_index])
+        rows.append(row)
+
+    return rt.matrix3(
+        rt.point3(rows[0][0], rows[0][1], rows[0][2]),
+        rt.point3(rows[1][0], rows[1][1], rows[1][2]),
+        rt.point3(rows[2][0], rows[2][1], rows[2][2]),
+        rt.point3(
+            -float(components[0]) * inv_scale,
+            float(components[1]) * inv_scale,
+            -float(components[2]) * inv_scale,
+        ),
     )
 
 
@@ -429,7 +487,7 @@ class MaxSceneAdapter:
                 # rest CFrame, so currentLocal = restLocal * delta.
                 delta = _matrix_inverse(rest_local) * current_local
                 pose_table[name] = {
-                    "components": _matrix_to_components(delta, unit_scale),
+                    "components": _deform_delta_to_components(delta, unit_scale),
                     "easingStyle": "Linear",
                     "easingDirection": "In",
                 }
@@ -458,6 +516,7 @@ class MaxSceneAdapter:
                 "format": "max-animation-plugin-json-v1",
                 "delta_order": "inverse_rest_times_current",
                 "rotation_basis": "orthonormalized_rows",
+                "deform_axis_conversion": "blender_parity_neg_x_pos_y_neg_z",
                 "target_bone_rest_received": target_bone_rest is not None,
             },
         }
@@ -477,6 +536,9 @@ class MaxSceneAdapter:
         rest_locals = self._capture_local_matrices(nodes)
         unit_scale = self._unit_scale()
         fps = self._fps()
+        is_deform_payload = bool(
+            animation_data.get("is_deform_bone_rig") or animation_data.get("is_deform_rig")
+        )
 
         keyframes = animation_data.get("kfs")
         if not isinstance(keyframes, list):
@@ -504,7 +566,11 @@ class MaxSceneAdapter:
                         if rest_local is None:
                             continue
 
-                        delta = _components_to_matrix(components, unit_scale)
+                        delta = (
+                            _components_to_deform_delta_matrix(components, unit_scale)
+                            if is_deform_payload
+                            else _components_to_matrix(components, unit_scale)
+                        )
                         local_matrix = rest_local * delta
                         parent_node = _parent(node)
                         if parent_node in nodes:
