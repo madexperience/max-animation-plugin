@@ -1,1 +1,4 @@
-linguist-language=MAXScript
+*.lua linguist-vendored
+*.py linguist-vendored
+studio-plugin/** linguist-vendored
+*.ms linguist-vendored=false linguist-language=MAXScript
