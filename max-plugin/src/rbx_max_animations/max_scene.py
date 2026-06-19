@@ -212,12 +212,12 @@ def _frame_to_time(frame: float) -> Any:
         return frame
 
     try:
-        return int(round(frame * float(rt.ticksPerFrame)))
+        return rt.frameToTime(frame)
     except Exception:
         pass
 
     try:
-        return rt.frameToTime(frame)
+        return frame * float(rt.ticksPerFrame)
     except Exception:
         return frame
 
