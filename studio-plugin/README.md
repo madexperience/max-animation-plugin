@@ -14,38 +14,52 @@ Implemented in this folder:
 - Max-labeled Player, Rigging, Tools, and More tabs
 - Max sync service names and UI copy
 - localhost HTTP client still using the existing endpoint protocol
-- Wally dependency declaration for Fusion
+- vendored Fusion dependency for build-without-Wally packaging
 - Rojo project file for packaging/syncing the plugin source
 
 Still WIP:
 
 - full 3ds Max rig conversion
 - full animation conversion validation
-- final `.rbxm` release packaging
+- final release automation
 - installer automation
 
-## Dependencies
+## Animator Install
 
-Use Wally from this folder:
+Animators should not need Rojo, Wally, or Rokit.
 
-```powershell
-rokit install
-cd studio-plugin
-wally install
-```
+1. Download `MaxAnimationsPlugin.rbxm` from the GitHub release.
+2. Copy it into Studio's local plugins folder:
 
-Current dependency:
+   ```powershell
+   $plugins = Join-Path $env:LOCALAPPDATA "Roblox\Plugins"
+   New-Item -ItemType Directory -Force $plugins
+   Copy-Item .\MaxAnimationsPlugin.rbxm $plugins\MaxAnimationsPlugin.rbxm -Force
+   ```
+
+3. Restart Roblox Studio.
+4. Open the `Max Animations` toolbar button.
+5. Run the 3ds Max companion server, then connect on port `31337`.
+
+## Source Dependencies
+
+Runtime dependencies are vendored so the plugin can be built without Wally.
+
+Current vendored dependency:
 
 ```toml
 Fusion = "elttob/fusion@0.2.0"
 ```
 
+Location:
+
+```text
+studio-plugin/vendor/Fusion
+```
+
 Promise is not required by the current runtime source. If a future port step introduces Promise usage, add it only when the call site exists.
 
-Manual dependency option:
-
-- Put Fusion `0.2.0` at `studio-plugin/Packages/Fusion`.
-- Rojo maps that folder under `MaxAnimationsInternal.Packages`, which matches the plugin's `require(...Packages.Fusion)` calls.
+`wally.toml` is kept only as an update reference for developers. The default Rojo project files do not require `wally install`.
 
 ## Build / Sync
 
@@ -54,7 +68,6 @@ With Rojo installed:
 ```powershell
 rokit install
 cd studio-plugin
-wally install
 rojo build plugin.project.json -o MaxAnimationsPlugin.rbxm
 ```
 
@@ -62,17 +75,15 @@ For development, you can also use Rojo sync:
 
 ```powershell
 cd studio-plugin
-wally install
 rojo serve default.project.json
 ```
 
 Then connect from Roblox Studio with the Rojo plugin.
 
-## Local Plugin Install Flow
+## Developer Local Plugin Install Flow
 
-1. Install dependencies with `wally install`.
-2. Build `MaxAnimationsPlugin.rbxm` with `rojo build plugin.project.json -o MaxAnimationsPlugin.rbxm`.
-3. Copy the generated model into Studio's local plugins folder:
+1. Build `MaxAnimationsPlugin.rbxm` with `rojo build plugin.project.json -o MaxAnimationsPlugin.rbxm`.
+2. Copy the generated model into Studio's local plugins folder:
 
    ```powershell
    $plugins = Join-Path $env:LOCALAPPDATA "Roblox\Plugins"
@@ -80,9 +91,9 @@ Then connect from Roblox Studio with the Rojo plugin.
    Copy-Item .\MaxAnimationsPlugin.rbxm $plugins\MaxAnimationsPlugin.rbxm -Force
    ```
 
-4. Restart or reload local plugins.
-5. Open the `Max Animations` toolbar button.
-6. Run the 3ds Max companion server, then connect on port `31337`.
+3. Restart or reload local plugins.
+4. Open the `Max Animations` toolbar button.
+5. Run the 3ds Max companion server, then connect on port `31337`.
 
 The plugin uses `HttpService:RequestAsync()` to talk to `localhost`, so Studio must allow local HTTP/plugin network requests when prompted.
 

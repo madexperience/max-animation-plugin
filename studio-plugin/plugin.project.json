@@ -4,7 +4,10 @@
     "$className": "Folder",
     "$path": "src/ServerScriptService/MaxAnimationsInternal",
     "Packages": {
-      "$path": "Packages"
+      "$className": "Folder",
+      "Fusion": {
+        "$path": "vendor/Fusion"
+      }
     }
   }
 }

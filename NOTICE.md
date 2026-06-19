@@ -7,6 +7,10 @@ The project is based on analysis of:
 - `Cautioned/Blender-Animations-Plugin`
 - Den_S's original Roblox DevForum work, "Blender rig exporter/animation importer"
 
+This project vendors the following MIT-licensed dependency:
+
+- Fusion `0.2.0` by Elttob/dphfox, used by the Roblox Studio plugin UI
+
 The initial implementation strategy keeps the Roblox Studio plugin workflow compatible with the existing localhost HTTP protocol, while replacing the Blender-side addon with a 3ds Max-side plugin.
 
 Roblox, Roblox Studio, Blender, and Autodesk 3ds Max are trademarks of their respective owners. This project is not affiliated with Roblox Corporation, Blender Foundation, or Autodesk.
