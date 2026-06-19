@@ -9,12 +9,15 @@
 (
     global MaxAnimations_Rollout
     global MaxAnimations_pythonEntry
+    global MaxAnimations_bakeEntry
     global MaxAnimations_startServer
+    global MaxAnimations_bakeClipboard
 
     local Path = dotNetClass "System.IO.Path"
     local scriptFile = getSourceFileName()
     local scriptDir = getFilenamePath scriptFile
     MaxAnimations_pythonEntry = Path.Combine scriptDir "start_max_server.py"
+    MaxAnimations_bakeEntry = Path.Combine scriptDir "bake_to_clipboard.py"
 
     fn MaxAnimations_startServer =
     (
@@ -30,21 +33,46 @@
         )
     )
 
+    fn MaxAnimations_bakeClipboard =
+    (
+        if doesFileExist MaxAnimations_bakeEntry then
+        (
+            try
+            (
+                python.ExecuteFile MaxAnimations_bakeEntry
+                true
+            )
+            catch
+            (
+                messageBox ("Bake to clipboard failed:\n" + getCurrentException()) title:"Max Animations"
+                false
+            )
+        )
+        else
+        (
+            messageBox ("Could not find bake_to_clipboard.py next to:\n" + MaxAnimations_bakeEntry) title:"Max Animations"
+            false
+        )
+    )
+
     try (destroyDialog MaxAnimations_Rollout) catch ()
 
-    rollout MaxAnimations_Rollout "Max Animations" width:420 height:230
+    rollout MaxAnimations_Rollout "Max Animations" width:440 height:300
     (
         label titleLabel "Roblox Max Animations" align:#center
         label statusLabel "Status: idle" align:#left
         label portLabel "Port: 127.0.0.1:31337" align:#left
-        button startButton "Start / Restart Local Server" width:370 height:28 align:#center
+        button startButton "Start / Restart Local Server" width:390 height:28 align:#center
         label spacer1 "" height:6
-        label flowLabel1 "Export is triggered from Roblox Studio." align:#left
-        label flowLabel2 "1. Keep this Max scene open." align:#left
-        label flowLabel3 "2. In Studio, select the rig and open Max Animations." align:#left
-        label flowLabel4 "3. Click Connect, then Import Animation from Max." align:#left
+        label directLabel "Direct import: Studio -> Connect -> Import Animation from Max." align:#left
+        label directNote "Requires Studio local HTTP permission." align:#left
         label spacer2 "" height:6
-        label noteLabel "This window only runs the local bridge; Studio pulls the animation." align:#left
+        button bakeButton "Bake Animation to Clipboard" width:390 height:28 align:#center
+        label clipboardStatusLabel "Clipboard: idle" align:#left
+        label clipLabel1 "Clipboard import: bake here, then Studio Legacy Import -> Clipboard." align:#left
+        label clipLabel2 "Paste the copied text into the opened Studio script." align:#left
+        label spacer3 "" height:6
+        label noteLabel "Select the rig root in Max when multiple rigs are in the scene." align:#left
 
         on MaxAnimations_Rollout open do
         (
@@ -67,6 +95,18 @@
             else
             (
                 statusLabel.text = "Status: failed to start"
+            )
+        )
+
+        on bakeButton pressed do
+        (
+            if MaxAnimations_bakeClipboard() then
+            (
+                clipboardStatusLabel.text = "Clipboard: baked animation copied"
+            )
+            else
+            (
+                clipboardStatusLabel.text = "Clipboard: bake failed"
             )
         )
     )
